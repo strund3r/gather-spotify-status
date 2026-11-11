@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - run: npm ci
+
+      - name: Lint and format
+        run: npx biome ci .
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Tests (with coverage)
+        run: npm run test:coverage
+
+      - name: Build all platforms
+        run: npm run build:all
+
+      - name: Smoke test the Linux binary
+        run: |
+          ./bin/gather-spotify-status-linux-x64 --version
+          ./bin/gather-spotify-status-linux-x64 --help > /dev/null
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binaries
+          path: |
+            bin/gather-spotify-status-*
+            bin/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
