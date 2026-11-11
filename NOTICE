@@ -1,0 +1,14 @@
+gather-spotify-status
+Copyright (C) 2026 Franzwagner Ternus
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. See the LICENSE file for the full text.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+-------------------------------------------------------------------------------------------------
+
+The compiled binaries bundle the Bun runtime and third-party npm packages, each under its own
+license (MIT, ISC, BSD-3-Clause, Apache-2.0); see node_modules/*/LICENSE in the source tree.
