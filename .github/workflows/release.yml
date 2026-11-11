@@ -38,6 +38,9 @@ jobs:
             exit 1
           fi
 
+      - name: Extract release notes from CHANGELOG.md
+        run: node scripts/release-notes.mjs > release-notes.md
+
       - run: npm ci
 
       - name: Build all platforms (runs lint, type check and tests first)
@@ -48,5 +51,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" bin/gather-spotify-status-* bin/SHA256SUMS \
-            --title "$TAG" --generate-notes --verify-tag
+          gh release create "$TAG" bin/gather-spotify-status-v* bin/SHA256SUMS \
+            --title "$TAG" --notes-file release-notes.md --verify-tag
