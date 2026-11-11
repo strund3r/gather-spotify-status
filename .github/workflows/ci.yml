@@ -46,14 +46,15 @@ jobs:
 
       - name: Smoke test the Linux binary
         run: |
-          ./bin/gather-spotify-status-linux-x64 --version
-          ./bin/gather-spotify-status-linux-x64 --help > /dev/null
+          version=$(node -p 'require("./package.json").version')
+          ./bin/gather-spotify-status-v"$version"-linux-x64 --version
+          ./bin/gather-spotify-status-v"$version"-linux-x64 --help > /dev/null
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries
           path: |
-            bin/gather-spotify-status-*
+            bin/gather-spotify-status-v*
             bin/SHA256SUMS
           if-no-files-found: error
           retention-days: 14

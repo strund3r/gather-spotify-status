@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Build standalone gather-spotify-status binaries (cross-platform: Linux, macOS, Windows).
-//   node scripts/build.mjs          all 5 platforms -> bin/gather-spotify-status-<os>-<arch>[.exe] + bin/SHA256SUMS
+//   node scripts/build.mjs          all 5 platforms -> bin/gather-spotify-status-v<ver>-<os>-<arch>[.exe] + bin/SHA256SUMS
 //   node scripts/build.mjs --host   this machine only -> bin/gather-spotify-status[.exe]
 // Runs the type check, lint and tests first; any failure stops the build.
 
@@ -88,7 +88,7 @@ const builtFiles = [];
 for (const target of TARGETS) {
   const platform = target.replace(/^bun-/, ""); // e.g. linux-x64
   const ext = platform.startsWith("windows-") ? ".exe" : "";
-  const fileName = `${NAME}-${platform}${ext}`;
+  const fileName = `${NAME}-v${version}-${platform}${ext}`;
   const outfile = path.join(outDir, fileName);
   console.log(`==> ${target} -> ${OUT}/${fileName}`);
   run(bun, ["build", ENTRY, "--compile", "--minify", `--target=${target}`, "--outfile", outfile]);
