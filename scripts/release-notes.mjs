@@ -32,4 +32,3 @@ if (!body) {
 }
 
 process.stdout.write(`${body}\n`);
-
