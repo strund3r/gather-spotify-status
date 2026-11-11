@@ -8,13 +8,13 @@ It ships as a single executable. You don't need Node.js, npm or anything else in
 
 Pick the binary for your platform:
 
-| Platform            | File                                    |
-| ------------------- | --------------------------------------- |
-| Linux x64           | `gather-spotify-status-linux-x64`       |
-| Linux ARM64         | `gather-spotify-status-linux-arm64`     |
-| macOS Apple Silicon | `gather-spotify-status-darwin-arm64`    |
-| macOS Intel         | `gather-spotify-status-darwin-x64`      |
-| Windows x64         | `gather-spotify-status-windows-x64.exe` |
+| Platform            | File                                           |
+| ------------------- | ---------------------------------------------- |
+| Linux x64           | `gather-spotify-status-v<ver>-linux-x64`       |
+| Linux ARM64         | `gather-spotify-status-v<ver>-linux-arm64`     |
+| macOS Apple Silicon | `gather-spotify-status-v<ver>-darwin-arm64`    |
+| macOS Intel         | `gather-spotify-status-v<ver>-darwin-x64`      |
+| Windows x64         | `gather-spotify-status-v<ver>-windows-x64.exe` |
 
 Verify the download against `SHA256SUMS`:
 
@@ -24,15 +24,15 @@ shasum -a 256 -c SHA256SUMS --ignore-missing  # macOS
 ```
 
 ```powershell
-Get-FileHash .\gather-spotify-status-windows-x64.exe  # Windows: compare with SHA256SUMS
+Get-FileHash .\gather-spotify-status-v*-windows-x64.exe  # Windows: compare with SHA256SUMS
 ```
 
 On Linux/macOS, make it executable: `chmod +x gather-spotify-status-*`
 
 **macOS:** the binaries are not signed by Apple.
 
-- If macOS blocks the file ("cannot be opened because the developer cannot be verified"), run `xattr -d com.apple.quarantine gather-spotify-status-darwin-*`.
-- If the Apple Silicon binary is killed as soon as it starts, ad-hoc sign it: `codesign --sign - gather-spotify-status-darwin-arm64`.
+- If macOS blocks the file ("cannot be opened because the developer cannot be verified"), run `xattr -d com.apple.quarantine gather-spotify-status-v*-darwin-*`.
+- If the Apple Silicon binary is killed as soon as it starts, ad-hoc sign it: `codesign --sign - gather-spotify-status-v*-darwin-arm64`.
 - Only do this for a binary whose checksum you verified.
 
 ### It installs itself
@@ -102,7 +102,7 @@ The app asks Spotify for two read-only permissions: `user-read-currently-playing
 ## Running
 
 ```sh
-./gather-spotify-status-linux-x64        # very first time: the downloaded file (it installs itself)
+./gather-spotify-status-v1.0.0-linux-x64 # very first time: the downloaded file (it installs itself)
 gather-spotify-status                    # afterwards, from any new terminal
 ```
 
