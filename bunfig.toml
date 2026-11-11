@@ -1,0 +1,8 @@
+[test]
+root = "test"
+# `bun test --coverage` (npm run test:coverage): text summary + coverage/lcov.info.
+# No coverageThreshold: Bun applies it per file, and the thin OS wrappers (open.ts, prompt.ts,
+# proc.ts, secrets.ts) can't be exercised without touching the real desktop/keychain/terminal.
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true

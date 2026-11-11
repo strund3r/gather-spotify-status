@@ -1,0 +1,46 @@
+{
+  "name": "gather-spotify-status",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sets your Gather status to your currently playing track on Spotify",
+  "scripts": {
+    "dev": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "readme:pdf": "node scripts/build-readme.mjs",
+    "build": "node scripts/build.mjs --host",
+    "build:all": "node scripts/build.mjs"
+  },
+  "author": "Franzwagner Ternus",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "bun": ">=1.4",
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@gathertown/gather-game-client": "^43.0.1",
+    "axios": "^1.21.1",
+    "express": "^4.22.3"
+  },
+  "overrides": {
+    "@gathertown/gather-game-client": {
+      "axios": "$axios"
+    },
+    "lodash": "^4.18.1",
+    "uuid": "^11.1.1",
+    "protobufjs": "^7.6.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@types/bun": "^1.4.4",
+    "@types/express": "^4.17.25",
+    "@types/node": "^22.20.5",
+    "marked": "^18.2.0",
+    "typescript": "^5.9.3"
+  }
+}
