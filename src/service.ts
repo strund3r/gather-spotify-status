@@ -54,6 +54,12 @@ export interface ServiceOptions {
   onConnection?: (connected: boolean) => void;
   /** Optional Game factory for tests. */
   createGame?: (spaceId: string, apiKey: string) => GameLike;
+  /** Optional playback fetcher for tests. */
+  fetch?: typeof fetchPlayback;
+  /** Optional exit hook for tests (defaults to process.exit). */
+  exit?: (code: number) => void;
+  /** Optional shutdown flush delay in ms for tests (defaults to SHUTDOWN_FLUSH_MS). */
+  flushMs?: number;
 }
 
 export interface Service {
@@ -103,7 +109,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
   const poller = new Poller({
     getToken: () => tokenManager.getValidToken(),
     forceRefresh: () => tokenManager.forceRefresh(),
-    fetch: fetchPlayback,
+    fetch: opts.fetch ?? fetchPlayback,
     send: (status) => setGatherStatus(game, status),
     settings: () => settings,
     canUsePlayer: () => tokenManager.hasScope(PLAYBACK_STATE_SCOPE),
@@ -130,6 +136,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
   });
   game.connect();
 
+  const flushMs = opts.flushMs ?? SHUTDOWN_FLUSH_MS;
   let stopping = false;
   const shutdown = async (reason: string, exitCode = 0): Promise<void> => {
     if (stopping) return;
@@ -139,14 +146,17 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     tokenManager.stop();
     try {
       setGatherStatus(game, CLEAR);
-      await sleep(SHUTDOWN_FLUSH_MS);
-      await Promise.race([game.disconnect(), sleep(SHUTDOWN_FLUSH_MS)]); // don't hang on a dead socket
+      await sleep(flushMs);
+      await Promise.race([game.disconnect(), sleep(flushMs)]); // don't hang on a dead socket
     } catch (e) {
       logger.debug(`error while disconnecting: ${errorMessage(e)}`);
     }
     control.close();
+    process.off("exit", onExit);
+    process.off("SIGTERM", onSigterm);
+    process.off("SIGINT", onSigint);
     removePidFile();
-    process.exit(exitCode); // the service owns the process: nothing else to unwind
+    (opts.exit ?? process.exit)(exitCode); // the service owns the process: nothing else to unwind
   };
 
   const control = await startControlServer({
@@ -176,10 +186,12 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     }),
   });
   writePidFile({ port: control.port, token: control.token });
-  process.on("exit", () => removePidFile());
-
-  process.on("SIGTERM", () => void shutdown("Received SIGTERM"));
-  process.on("SIGINT", () => void shutdown("Received SIGINT"));
+  const onExit = () => removePidFile();
+  const onSigterm = () => void shutdown("Received SIGTERM");
+  const onSigint = () => void shutdown("Received SIGINT");
+  process.on("exit", onExit);
+  process.on("SIGTERM", onSigterm);
+  process.on("SIGINT", onSigint);
   logger.debug(`service v${VERSION} started; control port ${control.port}`);
   return { shutdown };
 }

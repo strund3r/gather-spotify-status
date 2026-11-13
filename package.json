@@ -10,7 +10,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "test": "bun test",
-    "test:coverage": "bun test --coverage",
+    "test:coverage": "bun test --coverage && node scripts/check-coverage.mjs",
     "check": "npm run typecheck && npm run lint && npm test",
     "readme:pdf": "node scripts/build-readme.mjs",
     "build": "node scripts/build.mjs --host",
