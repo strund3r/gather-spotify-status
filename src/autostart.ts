@@ -68,59 +68,75 @@ export function windowsRunArgs(binary: string): string[] {
 
 // --- paths -------------------------------------------------------------------
 
-function linuxEntryPath(): string {
-  return path.join(xdgConfigHome(), "autostart", `${APP_NAME}.desktop`);
+export interface AutostartOptions {
+  platform?: NodeJS.Platform;
+  home?: string;
+  xdgConfigHome?: string;
+  binary?: string;
+  runReg?: (args: string[]) => { status: number | null };
 }
 
-function macPlistPath(): string {
-  return path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
+function linuxEntryPath(xdg = xdgConfigHome()): string {
+  return path.join(xdg, "autostart", `${APP_NAME}.desktop`);
+}
+
+function macPlistPath(home = os.homedir()): string {
+  return path.join(home, "Library", "LaunchAgents", `${LABEL}.plist`);
 }
 
 /** The binary the login entry should start: the installed copy if present, else this one. */
-function targetBinary(): string | null {
+function targetBinary(home = os.homedir(), platform = process.platform): string | null {
   if (!isCompiledBinary()) return null;
-  return fs.existsSync(installPath()) ? installPath() : process.execPath;
+  const installed = installPath(home, platform);
+  return fs.existsSync(installed) ? installed : process.execPath;
 }
 
 // --- commands ----------------------------------------------------------------
 
-function autostartEnabled(): boolean {
-  if (process.platform === "win32") {
-    return spawnSync("reg", ["query", RUN_KEY, "/v", APP_NAME], { windowsHide: true }).status === 0;
+export function autostartEnabled(opts: AutostartOptions = {}): boolean {
+  const platform = opts.platform ?? process.platform;
+  if (platform === "win32") {
+    const run = opts.runReg ?? ((args) => spawnSync("reg", args, { windowsHide: true }));
+    return run(["query", RUN_KEY, "/v", APP_NAME]).status === 0;
   }
-  return fs.existsSync(process.platform === "darwin" ? macPlistPath() : linuxEntryPath());
+  const file = platform === "darwin" ? macPlistPath(opts.home) : linuxEntryPath(opts.xdgConfigHome);
+  return fs.existsSync(file);
 }
 
-export function autostartCommand(action: "on" | "off" | "status"): boolean {
+export function autostartCommand(action: "on" | "off" | "status", opts: AutostartOptions = {}): boolean {
   if (action !== "status") markAutostartAsked(); // the user decided; don't ask on first run
+  const platform = opts.platform ?? process.platform;
   if (action === "status") {
-    console.log(autostartEnabled() ? out.green("● Start at login: on") : out.dim("○ Start at login: off"));
+    console.log(autostartEnabled(opts) ? out.green("● Start at login: on") : out.dim("○ Start at login: off"));
     return true;
   }
 
   if (action === "off") {
-    if (process.platform === "win32") {
-      spawnSync("reg", ["delete", RUN_KEY, "/v", APP_NAME, "/f"], { windowsHide: true });
+    if (platform === "win32") {
+      const run = opts.runReg ?? ((args) => spawnSync("reg", args, { windowsHide: true }));
+      run(["delete", RUN_KEY, "/v", APP_NAME, "/f"]);
     } else {
-      fs.rmSync(process.platform === "darwin" ? macPlistPath() : linuxEntryPath(), { force: true });
+      const file = platform === "darwin" ? macPlistPath(opts.home) : linuxEntryPath(opts.xdgConfigHome);
+      fs.rmSync(file, { force: true });
     }
     console.log(out.green("✓ Start at login turned off."));
     return true;
   }
 
-  const binary = targetBinary();
+  const binary = opts.binary ?? targetBinary(opts.home, platform);
   if (!binary) {
     console.error(err.red("Start at login only works with the compiled binary (not `npm run dev`)."));
     return false;
   }
   try {
-    if (process.platform === "win32") {
-      const r = spawnSync("reg", windowsRunArgs(binary), { windowsHide: true });
+    if (platform === "win32") {
+      const run = opts.runReg ?? ((args) => spawnSync("reg", args, { windowsHide: true }));
+      const r = run(windowsRunArgs(binary));
       if (r.status !== 0) throw new Error(`reg add exited with ${r.status}`);
     } else {
-      const file = process.platform === "darwin" ? macPlistPath() : linuxEntryPath();
+      const file = platform === "darwin" ? macPlistPath(opts.home) : linuxEntryPath(opts.xdgConfigHome);
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, process.platform === "darwin" ? launchAgentPlist(binary) : desktopEntry(binary));
+      fs.writeFileSync(file, platform === "darwin" ? launchAgentPlist(binary) : desktopEntry(binary));
     }
   } catch (e) {
     console.error(err.red(`Could not turn on start at login: ${errorMessage(e)}`));
