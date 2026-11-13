@@ -52,6 +52,8 @@ export interface ServiceOptions {
   onReady?: () => void;
   /** Called on every Gather connection change (foreground prints it nicely). */
   onConnection?: (connected: boolean) => void;
+  /** Optional Game factory for tests. */
+  createGame?: (spaceId: string, apiKey: string) => GameLike;
 }
 
 export interface Service {
@@ -67,7 +69,7 @@ function patchGatherLogger(fd: number): void {
   }
 }
 
-function setGatherStatus(game: Game, status: GatherStatus): void {
+function setGatherStatus(game: GameLike, status: GatherStatus): void {
   game.sendAction({ $case: "setEmojiStatus", setEmojiStatus: { emojiStatus: status.emoji } });
   game.sendAction({ $case: "setTextStatus", setTextStatus: { textStatus: status.text } });
 }
@@ -94,7 +96,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     },
   });
 
-  const game = new Game(cfg.GATHER_SPACE_ID, () => Promise.resolve({ apiKey: cfg.GATHER_API_KEY }));
+  const game = (opts.createGame ?? createGatherGame)(cfg.GATHER_SPACE_ID, cfg.GATHER_API_KEY);
   let connected = false;
   let ready = false;
 
