@@ -2,7 +2,14 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { desktopEntry, launchAgentPlist, shouldOfferAutostart, windowsRunArgs } from "../src/autostart";
+import {
+  autostartCommand,
+  autostartEnabled,
+  desktopEntry,
+  launchAgentPlist,
+  shouldOfferAutostart,
+  windowsRunArgs,
+} from "../src/autostart";
 import { checkForUpdate } from "../src/update";
 
 test("first-run autostart question: only interactive, compiled, not asked before", () => {
@@ -37,6 +44,78 @@ describe("autostart generators", () => {
       '"C:\\Users\\u\\AppData\\Local\\Programs\\gather-spotify-status\\gather-spotify-status.exe" --autostart',
     );
     expect(a.at(-1)).toBe("/f");
+  });
+});
+
+describe("autostartCommand lifecycle", () => {
+  let tempBase: string;
+  let homeDir: string;
+  let xdgDir: string;
+
+  beforeAll(() => {
+    tempBase = fs.mkdtempSync(path.join(os.tmpdir(), "gss-autostart-test-"));
+    homeDir = path.join(tempBase, "home");
+    xdgDir = path.join(tempBase, "xdg");
+  });
+
+  afterAll(() => {
+    fs.rmSync(tempBase, { recursive: true, force: true });
+  });
+
+  test("Linux: on writes .desktop, status reports on, off removes it", () => {
+    const desktopPath = path.join(xdgDir, "autostart", "gather-spotify-status.desktop");
+    const opts = { platform: "linux" as const, xdgConfigHome: xdgDir, binary: "/usr/bin/gather-spotify-status" };
+
+    expect(autostartEnabled(opts)).toBe(false);
+    expect(autostartCommand("status", opts)).toBe(true);
+
+    expect(autostartCommand("on", opts)).toBe(true);
+    expect(fs.existsSync(desktopPath)).toBe(true);
+    expect(autostartEnabled(opts)).toBe(true);
+
+    expect(autostartCommand("off", opts)).toBe(true);
+    expect(fs.existsSync(desktopPath)).toBe(false);
+    expect(autostartEnabled(opts)).toBe(false);
+  });
+
+  test("macOS: on writes .plist, status reports on, off removes it", () => {
+    const plistPath = path.join(homeDir, "Library", "LaunchAgents", "com.gather-spotify-status.plist");
+    const opts = { platform: "darwin" as const, home: homeDir, binary: "/usr/local/bin/gather-spotify-status" };
+
+    expect(autostartEnabled(opts)).toBe(false);
+    expect(autostartCommand("on", opts)).toBe(true);
+    expect(fs.existsSync(plistPath)).toBe(true);
+    expect(autostartEnabled(opts)).toBe(true);
+
+    expect(autostartCommand("off", opts)).toBe(true);
+    expect(fs.existsSync(plistPath)).toBe(false);
+    expect(autostartEnabled(opts)).toBe(false);
+  });
+
+  test("Windows: on, status, and off call registry handler", () => {
+    const regCalls: string[][] = [];
+    let queryStatus = 1;
+
+    const opts = {
+      platform: "win32" as const,
+      binary: "C:\\Program Files\\gather-spotify-status\\gather-spotify-status.exe",
+      runReg: (args: string[]) => {
+        regCalls.push(args);
+        if (args[0] === "query") return { status: queryStatus };
+        if (args[0] === "add") queryStatus = 0;
+        if (args[0] === "delete") queryStatus = 1;
+        return { status: 0 };
+      },
+    };
+
+    expect(autostartEnabled(opts)).toBe(false);
+    expect(autostartCommand("on", opts)).toBe(true);
+    expect(regCalls.some((c) => c[0] === "add")).toBe(true);
+    expect(autostartEnabled(opts)).toBe(true);
+
+    expect(autostartCommand("off", opts)).toBe(true);
+    expect(regCalls.some((c) => c[0] === "delete")).toBe(true);
+    expect(autostartEnabled(opts)).toBe(false);
   });
 });
 
