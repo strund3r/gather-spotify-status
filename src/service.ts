@@ -20,6 +20,30 @@ const SHUTDOWN_FLUSH_MS = 500;
 /** Gather SDK messages can be huge (whole state dumps); cut them in the log. */
 const GATHER_LOG_MAX_CHARS = 1000;
 
+/**
+ * Minimal Gather SDK subscriptions: only connection lifecycle/diagnostics, avoiding deprecated map
+ * events and admin-only event permission warnings in the log.
+ */
+export const GATHER_SUBSCRIPTIONS = {
+  info: true,
+  warn: true,
+  error: true,
+  subscriptionsUpdated: true,
+} as const;
+
+export interface GameLike {
+  connect(): void;
+  disconnect(): Promise<void>;
+  subscribeToConnection(cb: (connected: boolean) => void): void;
+  sendAction(action: Parameters<Game["sendAction"]>[0]): void;
+}
+
+export function createGatherGame(spaceId: string, apiKey: string): GameLike {
+  return new Game(spaceId, () => Promise.resolve({ apiKey }), undefined, undefined, undefined, {
+    subscribeTo: { ...GATHER_SUBSCRIPTIONS },
+  });
+}
+
 export interface ServiceOptions {
   debug: boolean;
   /** Log file for the Gather SDK's own messages ("[warn from gs] ...", "connecting to ..."). */
