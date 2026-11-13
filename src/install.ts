@@ -17,16 +17,28 @@ const PATH_MARKER = `# added by ${APP_NAME}`;
 const VERSION_PROBE_TIMEOUT_MS = 5000;
 const PATH_UPDATE_TIMEOUT_MS = 15_000;
 
-function installDir(): string {
-  if (process.platform === "win32") {
-    const base = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    return path.join(base, "Programs", APP_NAME);
-  }
-  return path.join(os.homedir(), ".local", "bin");
+export interface MaybeInstallOptions {
+  self?: string;
+  target?: string;
+  home?: string;
+  platform?: NodeJS.Platform;
+  compiled?: boolean;
+  installedVersion?: (target: string) => string | null;
+  reExec?: (env: Record<string, string>, target: string) => Promise<never> | Promise<void>;
+  stopRunning?: () => Promise<boolean>;
+  running?: () => ReturnType<typeof runningInstance>;
 }
 
-export function installPath(): string {
-  return path.join(installDir(), process.platform === "win32" ? `${APP_NAME}.exe` : APP_NAME);
+export function installDir(home = os.homedir(), platform: NodeJS.Platform = process.platform): string {
+  if (platform === "win32") {
+    const base = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+    return path.join(base, "Programs", APP_NAME);
+  }
+  return path.join(home, ".local", "bin");
+}
+
+export function installPath(home = os.homedir(), platform: NodeJS.Platform = process.platform): string {
+  return path.join(installDir(home, platform), platform === "win32" ? `${APP_NAME}.exe` : APP_NAME);
 }
 
 /** Version of the installed binary, or null if it can't tell (not our binary, or it failed to run). */
@@ -156,20 +168,24 @@ function printNextTimeHint(pathResult: PathResult, target: string): void {
  * First run / new version: move this binary to the per-user install location, put that on PATH,
  * and continue the run from the installed copy. No-op in dev mode, the daemon, or when installed.
  */
-export async function maybeInstall(): Promise<void> {
-  if (!isCompiledBinary() || process.env.GSS_INSTALLED === "1") return;
+export async function maybeInstall(opts: MaybeInstallOptions = {}): Promise<void> {
+  const isCompiled = opts.compiled ?? isCompiledBinary();
+  if (!isCompiled || process.env.GSS_INSTALLED === "1") return;
 
-  const self = process.execPath;
-  const target = installPath();
+  const home = opts.home ?? os.homedir();
+  const platform = opts.platform ?? process.platform;
+  const self = opts.self ?? process.execPath;
+  const target = opts.target ?? installPath(home, platform);
+  const targetDir = path.dirname(target);
   if (samePath(self, target)) return;
 
   let oldVersion: string | null = null;
   const upgrading = fs.existsSync(target);
   if (upgrading) {
-    oldVersion = installedVersion(target);
+    oldVersion = (opts.installedVersion ?? installedVersion)(target);
     if (oldVersion && compareSemver(VERSION, oldVersion) === 0) {
       console.log(out.dim(`v${VERSION} is already installed at ${target}.`));
-      printNextTimeHint(ensureOnPath(installDir()), target);
+      printNextTimeHint(ensureOnPath(targetDir, home, platform), target);
       return;
     }
     if (oldVersion && compareSemver(VERSION, oldVersion) < 0) {
@@ -182,18 +198,18 @@ export async function maybeInstall(): Promise<void> {
     }
   }
 
-  const running = runningInstance();
+  const running = (opts.running ?? runningInstance)();
   if (running) {
     console.log(out.yellow(`Stopping running v${running.version} (PID ${running.pid}) to upgrade...`));
-    await stopDaemon();
+    await (opts.stopRunning ?? stopDaemon)();
   }
 
   try {
-    fs.mkdirSync(installDir(), { recursive: true });
+    fs.mkdirSync(targetDir, { recursive: true });
     const tmp = `${target}.new`;
     fs.copyFileSync(self, tmp);
     fs.chmodSync(tmp, 0o755);
-    if (process.platform === "win32" && fs.existsSync(target)) {
+    if (platform === "win32" && fs.existsSync(target)) {
       // A running .exe can't be overwritten, but it can be renamed.
       try {
         fs.unlinkSync(`${target}.old`);
@@ -217,7 +233,7 @@ export async function maybeInstall(): Promise<void> {
   );
 
   // "Move": remove the downloaded copy. Windows can't delete a running .exe.
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     console.log(out.dim(`You can delete ${self}`));
   } else {
     try {
@@ -227,8 +243,8 @@ export async function maybeInstall(): Promise<void> {
     }
   }
 
-  printNextTimeHint(ensureOnPath(installDir()), target);
+  printNextTimeHint(ensureOnPath(targetDir, home, platform), target);
   console.log();
 
-  await reExec({ GSS_INSTALLED: "1" }, target);
+  await (opts.reExec ?? reExec)({ GSS_INSTALLED: "1" }, target);
 }
