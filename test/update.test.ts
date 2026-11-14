@@ -611,12 +611,16 @@ describe("updateCommand (mock GitHub)", () => {
     fs.writeFileSync(winTarget, "old-win-binary");
     const realRenameSync = fs.renameSync.bind(fs);
     const renameCalls: [string, string][] = [];
+    let failRollback = false;
     const renameSpy = spyOn(fs, "renameSync").mockImplementation((oldPath, newPath) => {
       const from = String(oldPath);
       const to = String(newPath);
       renameCalls.push([from, to]);
       if (from === `${winTarget}.new` && to === winTarget) {
         throw new Error("EPERM");
+      }
+      if (failRollback && from === `${winTarget}.old` && to === winTarget) {
+        throw new Error("EACCES");
       }
       return realRenameSync(oldPath, newPath);
     });
@@ -637,6 +641,18 @@ describe("updateCommand (mock GitHub)", () => {
       expect(renameCalls).toContainEqual([`${winTarget}.old`, winTarget]);
       expect(fs.readFileSync(winTarget, "utf8")).toBe("old-win-binary");
       expect(fs.existsSync(`${winTarget}.old`)).toBe(false);
+
+      failRollback = true;
+      const okFailRollback = await updateCommand({
+        repo: "me/app",
+        compiled: true,
+        currentVersion: "1.1.0",
+        platform: "win32",
+        arch: "x64",
+        target: winTarget,
+        running: () => null,
+      });
+      expect(okFailRollback).toBe(false);
     } finally {
       renameSpy.mockRestore();
     }
