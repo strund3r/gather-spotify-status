@@ -14,7 +14,8 @@
     "check": "npm run typecheck && npm run lint && npm test",
     "readme:pdf": "node scripts/build-readme.mjs",
     "build": "node scripts/build.mjs --host",
-    "build:all": "node scripts/build.mjs"
+    "build:all": "node scripts/build.mjs",
+    "prepare": "lefthook install"
   },
   "author": "Franzwagner Ternus",
   "license": "GPL-3.0-or-later",
@@ -40,6 +41,7 @@
     "@types/bun": "^1.4.4",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.5",
+    "lefthook": "^2.2.2",
     "marked": "^18.2.0",
     "typescript": "^5.9.3"
   }
