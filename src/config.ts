@@ -20,7 +20,7 @@ export interface Config {
   SPOTIFY_CLIENT_SECRET: string;
 }
 
-type ConfigKey = keyof Config;
+export type ConfigKey = keyof Config;
 
 interface FieldSpec {
   key: ConfigKey;
@@ -55,6 +55,13 @@ const FIELDS: FieldSpec[] = [
     secret: true,
   },
 ];
+
+export const CONFIG_KEYS: readonly ConfigKey[] = FIELDS.map((f) => f.key);
+const FIELD_BY_KEY = Object.fromEntries(FIELDS.map((f) => [f.key, f])) as Record<ConfigKey, FieldSpec>;
+
+export function isConfigKey(key: string): key is ConfigKey {
+  return (CONFIG_KEYS as readonly string[]).includes(key);
+}
 
 const SECRET_FIELDS = FIELDS.filter((f) => f.secret);
 const REFRESH_TOKEN_KEY = "SPOTIFY_REFRESH_TOKEN";
@@ -237,6 +244,158 @@ function isComplete(cfg: Partial<Config>): cfg is Config {
   return FIELDS.every((f) => !!cfg[f.key]);
 }
 
+async function promptField(field: FieldSpec, askFn: typeof ask, current?: string): Promise<string> {
+  console.log(`${out.bold(field.label)}: ${out.dim(field.hint)}`);
+  if (current !== undefined) {
+    const shown = field.secret ? "••••••••" : current;
+    console.log(out.dim(`  Current: ${shown} (press Enter to keep)`));
+  }
+  let value = "";
+  while (!value) {
+    const answer = (await askFn(`  ${field.key}: `, field.secret)).trim();
+    if (answer) value = answer;
+    else if (current !== undefined) value = current;
+    else console.log(out.yellow("  Value cannot be empty."));
+  }
+  console.log();
+  return value;
+}
+
+async function readStoredConfig(file: string): Promise<{ values: Partial<Config>; storage?: SecretStorage }> {
+  fixPermissions(file);
+  const { values: fromFile, secretStorage: storedIn } = readConfigFile(file);
+  const values: Partial<Config> = { ...fromFile };
+  if (storedIn !== "file") {
+    for (const { key } of SECRET_FIELDS) {
+      if (!values[key]) {
+        const secret = nonEmptyString(await getSecret(key));
+        if (secret) values[key] = secret;
+      }
+    }
+  }
+  return { values, storage: storedIn };
+}
+
+async function saveSecretsAndConfig(
+  file: string,
+  toSave: Partial<Config>,
+  preserveFileRefreshToken = true,
+): Promise<{ storage: SecretStorage; hasSecrets: boolean }> {
+  const secretKeys = SECRET_FIELDS.map((f) => f.key).filter((k) => toSave[k]);
+  let storage: SecretStorage = "keychain";
+  if (secretKeys.length > 0 && !(await storeAllSecrets(toSave, secretKeys))) {
+    storage = "file";
+    warnKeychainUnavailable(file);
+  }
+  if (storage === "keychain" && preserveFileRefreshToken) {
+    const fileRefreshToken = nonEmptyString(readRaw(file)[REFRESH_TOKEN_KEY]);
+    if (fileRefreshToken) await storeSecret(REFRESH_TOKEN_KEY, fileRefreshToken);
+  }
+  writeConfigFile(file, toSave, storage);
+  return { storage, hasSecrets: secretKeys.length > 0 };
+}
+
+async function persistUpdatedConfig(
+  file: string,
+  updated: Partial<Config>,
+  prevValues: Partial<Config>,
+): Promise<{ storage: SecretStorage; hasSecrets: boolean; spotifyCleared: boolean }> {
+  const spotifyChanged =
+    (prevValues.SPOTIFY_CLIENT_ID !== undefined && prevValues.SPOTIFY_CLIENT_ID !== updated.SPOTIFY_CLIENT_ID) ||
+    (prevValues.SPOTIFY_CLIENT_SECRET !== undefined &&
+      prevValues.SPOTIFY_CLIENT_SECRET !== updated.SPOTIFY_CLIENT_SECRET);
+  const hadRefreshToken = spotifyChanged ? (await loadRefreshToken()) !== null : false;
+  const { storage, hasSecrets } = await saveSecretsAndConfig(file, updated, !spotifyChanged);
+  if (spotifyChanged) await deleteRefreshToken();
+  return { storage, hasSecrets, spotifyCleared: hadRefreshToken };
+}
+
+function printSavedConfig(file: string, storage: SecretStorage, hasSecrets: boolean): void {
+  console.log(
+    out.green("✓ Saved config") +
+      out.dim(` to ${file}`) +
+      (storage === "keychain" && hasSecrets ? out.dim(`; secrets in ${keychainName()}`) : "") +
+      "\n",
+  );
+}
+
+/** Parse "KEY" or "KEY=VALUE" for `--set-config`. Throws Error with a readable message. */
+export function parseSetConfigArg(arg: string): { key: ConfigKey; value?: string } {
+  const eq = arg.indexOf("=");
+  const key = (eq === -1 ? arg : arg.slice(0, eq)).trim();
+  if (!isConfigKey(key)) {
+    throw new Error(`unknown config key "${key}". Valid keys: ${CONFIG_KEYS.join(", ")}`);
+  }
+  if (eq === -1) return { key };
+  const value = arg.slice(eq + 1).trim();
+  if (!value) throw new Error(`${key} cannot be empty`);
+  return { key, value };
+}
+
+/** Update one or more connection credentials without resetting config.json or unrelated secrets. */
+export async function setConfigCommand(
+  args: string[],
+  askFn: typeof ask = ask,
+  isTTY = Boolean(process.stdin.isTTY),
+): Promise<void> {
+  const parsed = args.map((arg) => {
+    try {
+      return parseSetConfigArg(arg);
+    } catch (e) {
+      throw new UserError(errorMessage(e), 2);
+    }
+  });
+
+  for (const item of parsed) {
+    if (item.value === undefined && !isTTY) {
+      throw new UserError(
+        `Missing value for ${item.key}. Pass ${item.key}=VALUE or run in an interactive terminal.`,
+        2,
+      );
+    }
+  }
+
+  const file = configPath();
+  const { values: prevValues } = await readStoredConfig(file);
+  const updates: Partial<Config> = {};
+  for (const { key, value } of parsed) {
+    updates[key] = value ?? (await promptField(FIELD_BY_KEY[key], askFn));
+  }
+
+  const updated = { ...prevValues, ...updates };
+  const { storage, spotifyCleared } = await persistUpdatedConfig(file, updated, prevValues);
+  for (const key of Object.keys(updates) as ConfigKey[]) {
+    const where = FIELD_BY_KEY[key].secret && storage === "keychain" ? ` (in ${keychainName()})` : "";
+    console.log(out.green(`✓ Saved ${key}`) + (where ? out.dim(where) : ""));
+  }
+  if (spotifyCleared) {
+    console.log(out.dim("Cleared saved Spotify login because Spotify app credentials changed."));
+  }
+}
+
+/** Re-run the interactive 4-field setup wizard, keeping existing values when pressing Enter. */
+export async function setupCommand(askFn: typeof ask = ask, isTTY = Boolean(process.stdin.isTTY)): Promise<Config> {
+  if (!isTTY) {
+    throw new UserError(`Run ${APP_NAME} --setup in an interactive terminal.`);
+  }
+  const file = configPath();
+  const { values: prevValues } = await readStoredConfig(file);
+  console.log(`${out.bold("Configure connection.")} ${out.dim(`Values will be saved to ${file}`)}\n`);
+
+  const nextValues: Partial<Config> = {};
+  for (const field of FIELDS) {
+    nextValues[field.key] = await promptField(field, askFn, prevValues[field.key]);
+  }
+
+  const { storage, hasSecrets, spotifyCleared } = await persistUpdatedConfig(file, nextValues, prevValues);
+  printSavedConfig(file, storage, hasSecrets);
+  if (spotifyCleared) {
+    console.log(out.dim("Cleared saved Spotify login because Spotify app credentials changed.\n"));
+  }
+  if (!isComplete(nextValues)) throw new Error("internal: config incomplete after setup");
+  return nextValues;
+}
+
 /**
  * Resolve config from (1) env vars, (2) OS keychain (secrets) / config file, (3) interactive prompt.
  * Secrets are kept in the OS keychain when available; old plaintext secrets in the file are migrated.
@@ -286,14 +445,7 @@ export async function loadConfig(): Promise<Config> {
 
   console.log(`${out.bold("First-time setup.")} ${out.dim(`Values will be saved to ${file}`)}\n`);
   for (const field of missing) {
-    console.log(`${out.bold(field.label)}: ${out.dim(field.hint)}`);
-    let value = "";
-    while (!value) {
-      value = (await ask(`  ${field.key}: `, field.secret)).trim();
-      if (!value) console.log(out.yellow("  Value cannot be empty."));
-    }
-    cfg[field.key] = value;
-    console.log();
+    cfg[field.key] = await promptField(field, ask);
   }
 
   // Only persist values that didn't come from env vars, so env-provided secrets are never stored.
@@ -303,19 +455,8 @@ export async function loadConfig(): Promise<Config> {
     if (!isFromEnv(key)) toSave[key] = cfg[key];
   }
 
-  const secretKeysToStore = SECRET_FIELDS.map((f) => f.key).filter((k) => !isFromEnv(k) && toSave[k]);
-  let newStorage: SecretStorage = "keychain";
-  if (secretKeysToStore.length > 0 && !(await storeAllSecrets(toSave, secretKeysToStore))) {
-    newStorage = "file";
-    warnKeychainUnavailable(file);
-  }
-  writeConfigFile(file, toSave, newStorage);
-  console.log(
-    out.green("✓ Saved config") +
-      out.dim(` to ${file}`) +
-      (newStorage === "keychain" && secretKeysToStore.length > 0 ? out.dim(`; secrets in ${keychainName()}`) : "") +
-      "\n",
-  );
+  const { storage: newStorage, hasSecrets } = await saveSecretsAndConfig(file, toSave);
+  printSavedConfig(file, newStorage, hasSecrets);
 
   if (!isComplete(cfg)) throw new Error("internal: config incomplete after setup");
   return cfg;
