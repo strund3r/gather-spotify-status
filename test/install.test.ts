@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ensureOnPath, maybeInstall } from "../src/install";
+import { VERSION } from "../src/version";
 
 describe("ensureOnPath", () => {
   const saved = {
@@ -162,7 +163,7 @@ describe("maybeInstall", () => {
       target: targetFile,
       home: homeDir,
       platform: "linux",
-      installedVersion: () => "1.0.0", // matches VERSION
+      installedVersion: () => VERSION,
       reExec: async () => {
         reExecCalled = true;
       },
