@@ -320,3 +320,36 @@ describe("setupCommand", () => {
     expect(store.get("SPOTIFY_CLIENT_SECRET")).toBe("cs1");
   });
 });
+
+describe("inspectConfig", () => {
+  test("reports missing keys when no config file or env vars exist", async () => {
+    const info = await config.inspectConfig();
+    expect(info.exists).toBe(false);
+    expect(info.missing).toEqual(["GATHER_API_KEY", "GATHER_SPACE_ID", "SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"]);
+    expect(info.fromEnv).toEqual([]);
+    expect(info.storage).toBeUndefined();
+  });
+
+  test("resolves stored keychain secrets and records env overrides", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+    process.env.GATHER_API_KEY = "env-override";
+
+    const info = await config.inspectConfig();
+    expect(info.exists).toBe(true);
+    expect(info.storage).toBe("keychain");
+    expect(info.missing).toEqual([]);
+    expect(info.fromEnv).toEqual(["GATHER_API_KEY"]);
+    expect(info.values.GATHER_API_KEY).toBe("env-override");
+    expect(info.values.SPOTIFY_CLIENT_SECRET).toBe("cs");
+  });
+
+  test("infers file storage for legacy plaintext configs and throws on corrupt JSON", async () => {
+    writeFile(OLD);
+    const info = await config.inspectConfig();
+    expect(info.storage).toBe("file");
+
+    fs.writeFileSync(file(), "{not valid json");
+    await expect(config.inspectConfig()).rejects.toBeInstanceOf(UserError);
+  });
+});

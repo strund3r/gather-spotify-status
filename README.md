@@ -369,6 +369,10 @@ To release a new version, bump `version` in `package.json` (the app reads it fro
 - [Spotify: Authorization Code Flow](https://developer.spotify.com/documentation/web-api/tutorials/code-flow)
 - [Spotify: Get Currently Playing Track](https://developer.spotify.com/documentation/web-api/reference/get-the-users-currently-playing-track)
 
+## AI Assistance
+
+AI tools were used to assist in the development of this project. All generated code was reviewed, verified, and tested.
+
 ## License
 
 [GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later). You may use, change and share it; if you distribute a modified version, it must be under the same license, with its source code available.

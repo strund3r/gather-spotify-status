@@ -14,6 +14,7 @@ By default it logs in to Spotify (or reuses your saved login) and keeps running 
 
 Running instance:
   --status            Show whether it's running, what it's showing, where the logs are
+  --doctor            Run diagnostic checks on config, keychain, TLS, Spotify, and Gather
   --stop              Stop it (and clear your Gather status)
   --pause / --resume  Temporarily clear your status / show it again
   --logs [-n N]       Show the last N log lines (default ${DEFAULT_LOG_LINES}) and follow new ones
@@ -54,6 +55,7 @@ export interface Flags {
   insecure: boolean;
   stop: boolean;
   status: boolean;
+  doctor: boolean;
   foreground: boolean;
   noInstall: boolean;
   readme: boolean;
@@ -77,6 +79,7 @@ const BOOLEAN_FLAGS = {
   "--insecure": "insecure",
   "--stop": "stop",
   "--status": "status",
+  "--doctor": "doctor",
   "--foreground": "foreground",
   "--no-install": "noInstall",
   "--readme": "readme",
@@ -111,6 +114,7 @@ export function parseFlags(argv: readonly string[]): Flags {
     insecure: false,
     stop: false,
     status: false,
+    doctor: false,
     foreground: false,
     noInstall: false,
     readme: false,
