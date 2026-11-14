@@ -401,7 +401,7 @@ export async function setupCommand(askFn: typeof ask = ask, isTTY = Boolean(proc
  * Secrets are kept in the OS keychain when available; old plaintext secrets in the file are migrated.
  * Env-provided values are never stored.
  */
-export async function loadConfig(): Promise<Config> {
+export async function loadConfig(askFn: typeof ask = ask, isTTY = Boolean(process.stdin.isTTY)): Promise<Config> {
   const file = configPath();
   fixPermissions(file);
   const { values: fromFile, secretStorage: storedIn } = readConfigFile(file);
@@ -436,7 +436,7 @@ export async function loadConfig(): Promise<Config> {
   if (isComplete(cfg)) return cfg;
 
   const missing = FIELDS.filter((f) => !cfg[f.key]);
-  if (!process.stdin.isTTY) {
+  if (!isTTY) {
     throw new UserError(
       `Missing configuration: ${missing.map((f) => f.key).join(", ")}\n` +
         `Run ${APP_NAME} in an interactive terminal to be prompted, or set these environment variables.`,
@@ -445,7 +445,7 @@ export async function loadConfig(): Promise<Config> {
 
   console.log(`${out.bold("First-time setup.")} ${out.dim(`Values will be saved to ${file}`)}\n`);
   for (const field of missing) {
-    cfg[field.key] = await promptField(field, ask);
+    cfg[field.key] = await promptField(field, askFn);
   }
 
   // Only persist values that didn't come from env vars, so env-provided secrets are never stored.
