@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import { LOOPBACK } from "./constants";
+import { logger } from "./logger";
 import type { GatherStatus } from "./status";
 import { errorMessage, isRecord } from "./util";
 
@@ -85,7 +86,8 @@ export function startControlServer(handlers: ControlHandlers): Promise<ControlSe
       handlers[action]();
       return reply(200, { ok: true });
     } catch (e) {
-      return reply(500, { error: errorMessage(e) });
+      logger.debug(`control ${action} failed: ${errorMessage(e)}`);
+      return reply(500, { error: "internal error" });
     }
   });
 
