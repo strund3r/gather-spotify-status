@@ -89,7 +89,7 @@ afterAll(() => {
   fs.rmSync(base, { recursive: true, force: true });
 });
 
-describe.skipIf(process.platform === "win32")("daemon commands", () => {
+describe("daemon commands", () => {
   test("nothing running", async () => {
     const out = captureConsole();
     try {

@@ -5,8 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const LCOV_PATH = path.resolve("coverage", "lcov.info");
-// Windows skips daemon.test.ts and tls.test.ts until ci/multi-os-matrix, so its lcov baseline is ~71%.
-const DEFAULT_MIN_LINES = process.platform === "win32" ? 70 : 74;
+// Windows skips tls.test.ts (requires openssl CLI), so its lcov baseline is slightly lower than POSIX.
+const DEFAULT_MIN_LINES = process.platform === "win32" ? 75 : 78;
 const minLines = Number(process.env.MIN_LINE_COVERAGE ?? DEFAULT_MIN_LINES);
 
 if (!fs.existsSync(LCOV_PATH)) {
