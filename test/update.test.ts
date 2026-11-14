@@ -1,11 +1,15 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  checkAndNotifyUpdate,
   checkForUpdate,
   checkUpdateCommand,
+  isTrustedAssetUrl,
+  MAX_BINARY_BYTES,
+  MAX_SUMS_BYTES,
   parseSha256Sums,
   printUpdate,
   releaseAssetName,
@@ -56,6 +60,34 @@ describe("parseSha256Sums", () => {
     expect(parseSha256Sums(sums, "gather-spotify-status-v1.2.0-linux-x64")).toBeNull();
     expect(parseSha256Sums(sums, "gather-spotify-status-v1.2.0-darwin-x64")).toBeNull();
     expect(parseSha256Sums(sums, "nonexistent")).toBeNull();
+  });
+});
+
+describe("isTrustedAssetUrl", () => {
+  test("accepts GitHub HTTPS hosts and rejects insecure, untrusted, malformed, or control-char URLs", () => {
+    const savedApi = process.env.GSS_GITHUB_API;
+    delete process.env.GSS_GITHUB_API;
+    try {
+      expect(isTrustedAssetUrl("https://github.com/strund3r/gather-spotify-status/releases/download/v1.2.0/bin")).toBe(
+        true,
+      );
+      expect(isTrustedAssetUrl("https://objects.githubusercontent.com/github-production-release-asset/123")).toBe(true);
+      expect(isTrustedAssetUrl("http://github.com/strund3r/gather-spotify-status/releases/download/v1.2.0/bin")).toBe(
+        false,
+      );
+      expect(isTrustedAssetUrl("https://evil.example.com/SHA256SUMS")).toBe(false);
+      expect(isTrustedAssetUrl("not-a-url")).toBe(false);
+      expect(isTrustedAssetUrl("")).toBe(false);
+      expect(isTrustedAssetUrl("https://github.com/a\x1b[2J")).toBe(false);
+      expect(isTrustedAssetUrl("https://github.com/a\x7f")).toBe(false);
+
+      process.env.GSS_GITHUB_API = "http://127.0.0.1:9999";
+      expect(isTrustedAssetUrl("http://127.0.0.1:9999/download/bin")).toBe(true);
+      expect(isTrustedAssetUrl("http://127.0.0.1:8888/download/bin")).toBe(false);
+    } finally {
+      if (savedApi === undefined) delete process.env.GSS_GITHUB_API;
+      else process.env.GSS_GITHUB_API = savedApi;
+    }
   });
 });
 
@@ -118,6 +150,9 @@ describe("updateCommand (mock GitHub)", () => {
   let sumsStatus = 200;
   let binStatus = 200;
   let omitAssets = false;
+  let untrustedAssets = false;
+  let oversizedSums = false;
+  let customTag: string | null = null;
   let latestVersion = "1.2.0";
   let binaryBytes = Buffer.from("new-binary-v1.2.0");
   let customSums: string | null = null;
@@ -142,16 +177,22 @@ describe("updateCommand (mock GitHub)", () => {
           const base = `http://127.0.0.1:${server.port}/download`;
           const linuxName = `gather-spotify-status-v${latestVersion}-linux-x64`;
           const winName = `gather-spotify-status-v${latestVersion}-windows-x64.exe`;
-          return Response.json({
-            tag_name: `v${latestVersion}`,
-            html_url: "https://example.test/releases/latest",
-            assets: omitAssets
-              ? []
+          const assets = omitAssets
+            ? []
+            : untrustedAssets
+              ? [
+                  { name: "SHA256SUMS", browser_download_url: "https://evil.example.com/SHA256SUMS" },
+                  { name: linuxName, browser_download_url: `https://evil.example.com/${linuxName}` },
+                ]
               : [
                   { name: "SHA256SUMS", browser_download_url: `${base}/SHA256SUMS` },
                   { name: linuxName, browser_download_url: `${base}/${linuxName}` },
                   { name: winName, browser_download_url: `${base}/${winName}` },
-                ],
+                ];
+          return Response.json({
+            tag_name: customTag ?? `v${latestVersion}`,
+            html_url: "https://example.test/releases/latest",
+            assets,
           });
         }
         if (
@@ -160,6 +201,18 @@ describe("updateCommand (mock GitHub)", () => {
         ) {
           downloadHits++;
           if (sumsStatus !== 200) return new Response("error", { status: sumsStatus });
+          if (oversizedSums) {
+            const chunk = new Uint8Array(MAX_SUMS_BYTES + 1).fill(0x61);
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(chunk);
+                  controller.close();
+                },
+              }),
+              { status: 200 },
+            );
+          }
           const digest = sha256Hex(binaryBytes);
           const linuxName = `gather-spotify-status-v${latestVersion}-linux-x64`;
           const winName = `gather-spotify-status-v${latestVersion}-windows-x64.exe`;
@@ -185,6 +238,9 @@ describe("updateCommand (mock GitHub)", () => {
     sumsStatus = 200;
     binStatus = 200;
     omitAssets = false;
+    untrustedAssets = false;
+    oversizedSums = false;
+    customTag = null;
     latestVersion = "1.2.0";
     binaryBytes = Buffer.from("new-binary-v1.2.0");
     customSums = null;
