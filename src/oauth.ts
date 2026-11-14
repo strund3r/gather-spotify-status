@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Spotify browser login: Authorization Code flow with state + PKCE, served on 127.0.0.1.
 import crypto from "node:crypto";
+import http from "node:http";
 import querystring from "node:querystring";
-import express, { type Request, type Response } from "express";
 import { err, out } from "./colors";
 import type { Config } from "./config";
 import { APP_NAME, LOOPBACK } from "./constants";
@@ -63,6 +63,25 @@ export interface LoginOptions {
   onListening?: (url: string) => void;
 }
 
+const MAX_PENDING_STATES = 32;
+
+function sendText(res: http.ServerResponse, status: number, text: string): void {
+  res.writeHead(status, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end(text);
+}
+
+function sendHtml(res: http.ServerResponse, status: number, html: string, closeConnection = false): void {
+  const headers: http.OutgoingHttpHeaders = { "Content-Type": "text/html; charset=utf-8" };
+  if (closeConnection) headers.Connection = "close";
+  res.writeHead(status, headers);
+  res.end(html);
+}
+
+function redirect(res: http.ServerResponse, location: string): void {
+  res.writeHead(302, { Location: location });
+  res.end();
+}
+
 /**
  * Run the local OAuth login (state + PKCE). Resolves with tokens once the user approves, then closes
  * the server. Rejects with a UserError if the local server can't start (e.g. port in use).
@@ -70,88 +89,104 @@ export interface LoginOptions {
 export function spotifyLogin(cfg: Config, opts: LoginOptions = {}): Promise<TokenSet> {
   const port = opts.port ?? LOGIN_PORT;
   return new Promise((resolve, reject) => {
-    const app = express();
     let done = false;
     let loginUrl = `http://${LOOPBACK}:${port}`;
     const redirectUri = () => `${loginUrl}/callback`;
     // OAuth state -> PKCE code_verifier, for logins in progress. Each state is single-use.
     const pending = new Map<string, string>();
 
-    app.get("/", (_: Request, res: Response) => {
-      if (done) {
-        res.send(loginDonePage("Already logged in to Spotify"));
-        return;
-      }
-      const state = base64url(crypto.randomBytes(16));
-      const verifier = base64url(crypto.randomBytes(32));
-      const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
-      pending.set(state, verifier);
-
-      res.redirect(
-        `${accountsBase()}/authorize?${querystring.stringify({
-          client_id: cfg.SPOTIFY_CLIENT_ID,
-          response_type: "code",
-          redirect_uri: redirectUri(),
-          scope: SCOPES,
-          state,
-          code_challenge_method: "S256",
-          code_challenge: challenge,
-        })}`,
-      );
-    });
-
-    app.get("/callback", async (req: Request, res: Response) => {
-      if (done) {
-        res.status(410).send("Already logged in. Restart the app to log in again.");
+    const server = http.createServer(async (req, res) => {
+      if (req.method !== "GET") {
+        sendText(res, 405, "Method Not Allowed");
         return;
       }
 
-      const { code, state, error } = req.query;
-      if (typeof error === "string") {
-        res.status(400).send(`Spotify login failed: ${error}`);
-        return;
-      }
-      const verifier = typeof state === "string" ? pending.get(state) : undefined;
-      if (typeof state !== "string" || verifier === undefined) {
-        res.status(400).send(`Invalid or expired login state. Start again from ${loginUrl}`);
-        return;
-      }
-      pending.delete(state);
-
-      if (!code || typeof code !== "string") {
-        res.status(400).send("Missing or invalid authorization code.");
-        return;
-      }
-
+      let reqUrl: URL;
       try {
-        const tokenResponse = await postToken(cfg, {
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: redirectUri(),
-          code_verifier: verifier,
-        });
-        const tokens = toTokenSet(tokenResponse.data);
-
-        done = true;
-        pending.clear();
-        res.set("Connection", "close");
-        res.send(loginDonePage("Logged in to Spotify"));
-        server.close();
-        console.log(out.green("✓ Logged in to Spotify."));
-        resolve(tokens);
-      } catch (e) {
-        console.error(err.red(`Error exchanging code for tokens: ${describeError(e)}`));
-        res.status(500).send("Internal Server Error");
+        reqUrl = new URL(req.url ?? "/", loginUrl);
+      } catch {
+        sendText(res, 400, "Bad Request");
+        return;
       }
+
+      if (reqUrl.pathname === "/") {
+        if (done) {
+          sendHtml(res, 200, loginDonePage("Already logged in to Spotify"));
+          return;
+        }
+        if (pending.size >= MAX_PENDING_STATES) pending.clear();
+        const state = base64url(crypto.randomBytes(16));
+        const verifier = base64url(crypto.randomBytes(32));
+        const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
+        pending.set(state, verifier);
+
+        redirect(
+          res,
+          `${accountsBase()}/authorize?${querystring.stringify({
+            client_id: cfg.SPOTIFY_CLIENT_ID,
+            response_type: "code",
+            redirect_uri: redirectUri(),
+            scope: SCOPES,
+            state,
+            code_challenge_method: "S256",
+            code_challenge: challenge,
+          })}`,
+        );
+        return;
+      }
+
+      if (reqUrl.pathname === "/callback") {
+        if (done) {
+          sendText(res, 410, "Already logged in. Restart the app to log in again.");
+          return;
+        }
+
+        const error = reqUrl.searchParams.get("error");
+        if (error !== null) {
+          const safeError = /^[a-zA-Z0-9_.-]{1,64}$/.test(error) ? error : "access_denied";
+          sendText(res, 400, `Spotify login failed: ${safeError}`);
+          return;
+        }
+
+        const state = reqUrl.searchParams.get("state");
+        const verifier = state ? pending.get(state) : undefined;
+        if (!state || verifier === undefined) {
+          sendText(res, 400, `Invalid or expired login state. Start again from ${loginUrl}`);
+          return;
+        }
+        pending.delete(state);
+
+        const code = reqUrl.searchParams.get("code");
+        if (!code) {
+          sendText(res, 400, "Missing or invalid authorization code.");
+          return;
+        }
+
+        try {
+          const tokenResponse = await postToken(cfg, {
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri(),
+            code_verifier: verifier,
+          });
+          const tokens = toTokenSet(tokenResponse.data);
+
+          done = true;
+          pending.clear();
+          sendHtml(res, 200, loginDonePage("Logged in to Spotify"), true);
+          server.close();
+          console.log(out.green("✓ Logged in to Spotify."));
+          resolve(tokens);
+        } catch (e) {
+          console.error(err.red(`Error exchanging code for tokens: ${describeError(e)}`));
+          sendText(res, 500, "Internal Server Error");
+        }
+        return;
+      }
+
+      sendText(res, 404, "Not Found");
     });
 
-    const server = app.listen(port, LOOPBACK, () => {
-      const addr = server.address();
-      if (addr && typeof addr === "object") loginUrl = `http://${LOOPBACK}:${addr.port}`;
-      console.log(`Open ${out.underline(out.cyan(loginUrl))} to log in to Spotify`);
-      opts.onListening?.(loginUrl);
-      if (opts.openBrowser !== false) void openExternal(loginUrl); // best-effort; the URL is printed anyway
-    });
     server.on("error", (e) => {
       reject(
         new UserError(
@@ -160,6 +195,13 @@ export function spotifyLogin(cfg: Config, opts: LoginOptions = {}): Promise<Toke
             : `Could not start local login server: ${errorMessage(e)}`,
         ),
       );
+    });
+    server.listen(port, LOOPBACK, () => {
+      const addr = server.address();
+      if (addr && typeof addr === "object") loginUrl = `http://${LOOPBACK}:${addr.port}`;
+      console.log(`Open ${out.underline(out.cyan(loginUrl))} to log in to Spotify`);
+      opts.onListening?.(loginUrl);
+      if (opts.openBrowser !== false) void openExternal(loginUrl); // best-effort; the URL is printed anyway
     });
   });
 }
