@@ -1,5 +1,7 @@
 # gather-spotify-status
 
+[![codecov](https://codecov.io/github/strund3r/gather-spotify-status/graph/badge.svg?token=A73JIEN17X)](https://codecov.io/github/strund3r/gather-spotify-status)
+
 Sets your [Gather](https://gather.town) status to the track you're playing on Spotify (🎶 _Artist ∙ Song_), or 🎙️ when you're listening to a podcast. When nothing is playing, your status is cleared.
 
 It ships as a single executable. You don't need Node.js, npm or anything else installed.
