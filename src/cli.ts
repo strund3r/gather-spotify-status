@@ -26,6 +26,8 @@ Settings (applied immediately to a running instance):
                       Keys: ${SETTING_KEYS.join(", ")}
 
 Setup:
+  --setup             Re-run the setup wizard (press Enter to keep current values)
+  --set-config KEY[=VALUE]  Change a connection credential (prompts if =VALUE is omitted)
   --autostart on|off|status  Start automatically when you log in to your computer
   --logout            Forget the saved Spotify login
   --reset             Delete saved config and secrets, and prompt again
@@ -59,6 +61,8 @@ export interface Flags {
   pause: boolean;
   resume: boolean;
   logout: boolean;
+  setup: boolean;
+  setConfig: string[];
   checkUpdate: boolean;
   /** Bare --autostart: started by the login entry. */
   autostartRun: boolean;
@@ -80,6 +84,7 @@ const BOOLEAN_FLAGS = {
   "--pause": "pause",
   "--resume": "resume",
   "--logout": "logout",
+  "--setup": "setup",
   "--check-update": "checkUpdate",
 } as const satisfies Record<string, keyof Flags>;
 
@@ -113,6 +118,8 @@ export function parseFlags(argv: readonly string[]): Flags {
     pause: false,
     resume: false,
     logout: false,
+    setup: false,
+    setConfig: [],
     checkUpdate: false,
     autostartRun: false,
     set: [],
@@ -160,6 +167,11 @@ export function parseFlags(argv: readonly string[]): Flags {
       case "--set":
         if (next === undefined) throw new UsageError("--set needs key=value");
         flags.set.push(next);
+        i++;
+        break;
+      case "--set-config":
+        if (next === undefined) throw new UsageError("--set-config needs KEY or KEY=VALUE");
+        flags.setConfig.push(next);
         i++;
         break;
       default:
