@@ -236,6 +236,7 @@ gather-spotify-status --debug         # start with verbose logging (or: --set de
 ```text
 Running instance:
   --status            Show whether it's running, what it's showing, where the logs are
+  --doctor            Run diagnostic checks on config, keychain, TLS, Spotify, and Gather
   --stop              Stop it (and clear your Gather status)
   --pause / --resume  Temporarily clear your status / show it again
   --logs [-n N]       Show the last N log lines (default 50) and follow new ones
@@ -247,6 +248,8 @@ Settings (applied immediately to a running instance):
   --set key=value     Change a setting
 
 Setup:
+  --setup             Re-run the setup wizard (press Enter to keep current values)
+  --set-config KEY[=VALUE]  Change a connection credential (prompts if =VALUE is omitted)
   --autostart on|off|status  Start automatically when you log in to your computer
   --logout            Forget the saved Spotify login
   --reset             Delete saved config and secrets, and prompt again
@@ -296,16 +299,16 @@ NODE_EXTRA_CA_CERTS=/path/to/corp-root-ca.pem gather-spotify-status
 
 ## Troubleshooting
 
-- **First stop: `gather-spotify-status --status` and `--logs`.** Most problems are explained there.
+- **First stop: `gather-spotify-status --doctor`, `--status`, and `--logs`.** Most setup, TLS, Spotify login, and Gather connection issues are diagnosed there with fix steps.
 - **`gather-spotify-status: command not found` after installing:** open a new terminal so it picks up the PATH change. You can also run it via its full path, `~/.local/bin/gather-spotify-status`.
 - **`Port 42843 is already in use`:** another copy is running (perhaps an old one started with `--no-install` or from source). Stop it first.
-- **`Could not start in the background: no connection after 30s`:** Gather didn't connect. Check the log, then `GATHER_SPACE_ID` and `GATHER_API_KEY` (fix them with `--reset`).
+- **`Could not start in the background: no connection after 30s`:** Gather didn't connect. Check the log, then update `GATHER_SPACE_ID` or `GATHER_API_KEY` with `--set-config`.
 - **Spotify login says `INVALID_CLIENT: Invalid redirect URI`:** the redirect URI in your Spotify app must be exactly `http://127.0.0.1:42843/callback`.
 - **Spotify login works but nothing shows up / 403 in the log:** add your Spotify account under **User Management** in the developer dashboard (max 5 users), and make sure the app owner has Spotify Premium.
 - **`--status` says "Spotify login expired":** run `gather-spotify-status` to log in again.
 - **Status doesn't show at certain times:** check `workHours`, `blockArtists` and `skipPrivateSession` with `--get`, and whether you paused it (`--status`).
-- **The log keeps saying "Disconnected from Gather":** check `GATHER_SPACE_ID` (both parts, with spaces, not `%20`) and `GATHER_API_KEY`. Fix them with `--reset`.
-- **Wrong values saved:** run with `--reset`.
+- **The log keeps saying "Disconnected from Gather":** check `GATHER_SPACE_ID` (both parts, with spaces, not `%20`) and `GATHER_API_KEY`. Fix them with `--set-config` or `--setup`.
+- **Wrong values saved:** update one field with `--set-config KEY` (keeps `settings` and your Spotify login), re-run `--setup`, or use `--reset` to start fresh.
 
 ## Where your secrets are stored
 
