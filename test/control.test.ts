@@ -76,6 +76,35 @@ describe("control channel", () => {
     server.close();
   });
 
+  test("handler errors return generic 500 without leaking error details", async () => {
+    const server = await startControlServer({
+      stop: () => {},
+      pause: () => {
+        throw new Error("secret internal failure detail");
+      },
+      resume: () => {},
+      reload: () => {},
+      status: () => ({
+        version: "test",
+        connected: true,
+        paused: false,
+        sessionExpired: false,
+        outsideWorkHours: false,
+        lastStatus: null,
+        lastError: null,
+        backoffUntil: 0,
+      }),
+    });
+    const res = await fetch(`http://127.0.0.1:${server.port}/pause`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${server.token}` },
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "internal error" });
+    expect(await controlRequest({ port: server.port, token: server.token }, "pause")).toBeNull();
+    server.close();
+  });
+
   test("client returns null when nothing listens or no port/token", async () => {
     expect(await controlRequest({}, "status")).toBeNull();
     expect(await controlRequest({ port: 1, token: "x" }, "status", 500)).toBeNull();
