@@ -11,6 +11,7 @@ import { stopDaemon } from "./daemon";
 import { readJson, writePrivateJson } from "./fsutil";
 import { installPath } from "./install";
 import { logger } from "./logger";
+import { sendDesktopNotification } from "./notify";
 import { configDir } from "./paths";
 import { runningInstance } from "./pidfile";
 import { isCompiledBinary } from "./proc";
@@ -207,19 +208,57 @@ export async function checkForUpdate(
 
   let cache = readCache();
   if (opts.force || !cache || now - cache.checkedAt > DAY_MS) {
+    const prevNotified = cache?.notifiedVersion;
     try {
       cache = await fetchLatest(repo, now);
       if (!cache) return null;
-      writePrivateJson(cachePath(), cache);
+      writeCachePreservingNotified(cache, prevNotified);
     } catch (e) {
       logger.debug(`update check failed: ${errorMessage(e)}`);
       return null;
     }
   }
-  if (cache.latest && /^\d+\.\d+\.\d+/.test(cache.latest) && compareSemver(cache.latest, VERSION) > 0) {
+  if (cache.latest && SEMVER_RE.test(cache.latest) && compareSemver(cache.latest, opts.currentVersion ?? VERSION) > 0) {
     return { latest: cache.latest, url: cache.url ?? "" };
   }
   return null;
+}
+
+export interface NotifyUpdateOptions {
+  repo?: string;
+  now?: number;
+  currentVersion?: string;
+  notify?: (title: string, body: string) => boolean;
+}
+
+/**
+ * Check for a newer release (using the 24h cache) and send a desktop notification at most once
+ * per version. Returns true if a notification was sent.
+ */
+export async function checkAndNotifyUpdate(opts: NotifyUpdateOptions = {}): Promise<boolean> {
+  const info = await checkForUpdate({
+    repo: opts.repo,
+    now: opts.now,
+    currentVersion: opts.currentVersion,
+  });
+  if (!info) return false;
+
+  const cache = readCache();
+  if (cache?.notifiedVersion === info.latest) return false;
+
+  const title = `${APP_NAME} v${info.latest} available`;
+  const body = `Run '${APP_NAME} --update' to upgrade.`;
+  const sent = (opts.notify ?? sendDesktopNotification)(title, body);
+  if (!sent) return false;
+
+  writePrivateJson(cachePath(), {
+    checkedAt: cache?.checkedAt ?? opts.now ?? Date.now(),
+    latest: info.latest,
+    url: info.url,
+    notifiedVersion: info.latest,
+  });
+  logger.info(`New version v${info.latest} available (run '${APP_NAME} --update' to upgrade).`);
+  return true;
 }
 
 export function printUpdate(info: UpdateInfo): void {

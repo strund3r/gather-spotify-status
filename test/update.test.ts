@@ -526,4 +526,284 @@ describe("updateCommand (mock GitHub)", () => {
     expect(fs.readFileSync(winTarget, "utf8")).toBe("new-binary-v1.2.0");
     expect(fs.readFileSync(`${winTarget}.old`, "utf8")).toBe("old-win-binary");
   });
+
+  test("rejects tag_name with trailing non-semver characters", async () => {
+    for (const tag of ["v1.2.0-evil", "v1.2.0/../../pwn"]) {
+      customTag = tag;
+      const ok = await updateCommand({
+        repo: "me/app",
+        compiled: true,
+        currentVersion: "1.1.0",
+        platform: "linux",
+        arch: "x64",
+        target: targetFile,
+      });
+      expect(ok).toBe(false);
+    }
+    expect(downloadHits).toBe(0);
+  });
+
+  test("ignores untrusted browser_download_url in assets and falls back to canonical URL", async () => {
+    untrustedAssets = true;
+    const ok = await updateCommand({
+      repo: "me/app",
+      compiled: true,
+      currentVersion: "1.1.0",
+      platform: "linux",
+      arch: "x64",
+      target: targetFile,
+    });
+    expect(ok).toBe(true);
+    expect(fs.readFileSync(targetFile, "utf8")).toBe("new-binary-v1.2.0");
+  });
+
+  test("aborts when streamed SHA256SUMS exceeds MAX_SUMS_BYTES without Content-Length", async () => {
+    oversizedSums = true;
+    const ok = await updateCommand({
+      repo: "me/app",
+      compiled: true,
+      currentVersion: "1.1.0",
+      platform: "linux",
+      arch: "x64",
+      target: targetFile,
+    });
+    expect(ok).toBe(false);
+    expect(fs.readFileSync(targetFile, "utf8")).toBe("old-binary-v1.1.0");
+  });
+
+  test("aborts when binary Content-Length exceeds MAX_BINARY_BYTES", async () => {
+    const payload = "too-large";
+    customSums = `${sha256Hex(payload)}  gather-spotify-status-v1.2.0-linux-x64\n`;
+    const realFetch = globalThis.fetch.bind(globalThis);
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+      Object.assign(
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+          if (url.includes("gather-spotify-status-v1.2.0-linux-x64")) {
+            return new Response(payload, {
+              status: 200,
+              headers: { "Content-Length": String(MAX_BINARY_BYTES + 1) },
+            });
+          }
+          return realFetch(input, init);
+        },
+        { preconnect: realFetch.preconnect },
+      ),
+    );
+    try {
+      const ok = await updateCommand({
+        repo: "me/app",
+        compiled: true,
+        currentVersion: "1.1.0",
+        platform: "linux",
+        arch: "x64",
+        target: targetFile,
+      });
+      expect(ok).toBe(false);
+      expect(fs.readFileSync(targetFile, "utf8")).toBe("old-binary-v1.1.0");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("rolls back .old to target on Windows when final rename fails", async () => {
+    const winTarget = `${targetFile}.rollback.exe`;
+    fs.writeFileSync(winTarget, "old-win-binary");
+    const realRenameSync = fs.renameSync.bind(fs);
+    const renameCalls: [string, string][] = [];
+    const renameSpy = spyOn(fs, "renameSync").mockImplementation((oldPath, newPath) => {
+      const from = String(oldPath);
+      const to = String(newPath);
+      renameCalls.push([from, to]);
+      if (from === `${winTarget}.new` && to === winTarget) {
+        throw new Error("EPERM");
+      }
+      return realRenameSync(oldPath, newPath);
+    });
+
+    try {
+      const ok = await updateCommand({
+        repo: "me/app",
+        compiled: true,
+        currentVersion: "1.1.0",
+        platform: "win32",
+        arch: "x64",
+        target: winTarget,
+        running: () => null,
+      });
+      expect(ok).toBe(false);
+      expect(renameCalls).toContainEqual([winTarget, `${winTarget}.old`]);
+      expect(renameCalls).toContainEqual([`${winTarget}.new`, winTarget]);
+      expect(renameCalls).toContainEqual([`${winTarget}.old`, winTarget]);
+      expect(fs.readFileSync(winTarget, "utf8")).toBe("old-win-binary");
+      expect(fs.existsSync(`${winTarget}.old`)).toBe(false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+  });
+});
+
+describe("checkAndNotifyUpdate", () => {
+  let server: ReturnType<typeof Bun.serve>;
+  let xdgBase: string;
+  let latestVersion = "1.2.0";
+  const savedApi = process.env.GSS_GITHUB_API;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+
+  beforeAll(() => {
+    xdgBase = fs.mkdtempSync(path.join(os.tmpdir(), "gss-notify-upd-"));
+    process.env.XDG_CONFIG_HOME = xdgBase;
+    server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        if (new URL(req.url).pathname === "/repos/me/app/releases/latest") {
+          return Response.json({
+            tag_name: `v${latestVersion}`,
+            html_url: `https://example.test/v${latestVersion}`,
+          });
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+    process.env.GSS_GITHUB_API = `http://127.0.0.1:${server.port}`;
+  });
+
+  beforeEach(() => {
+    latestVersion = "1.2.0";
+    fs.rmSync(path.join(xdgBase, "gather-spotify-status", "update-check.json"), { force: true });
+  });
+
+  afterAll(() => {
+    server.stop(true);
+    if (savedApi === undefined) delete process.env.GSS_GITHUB_API;
+    else process.env.GSS_GITHUB_API = savedApi;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+    fs.rmSync(xdgBase, { recursive: true, force: true });
+  });
+
+  test("returns false when already up to date", async () => {
+    let notified = false;
+    const sent = await checkAndNotifyUpdate({
+      repo: "me/app",
+      currentVersion: "1.2.0",
+      notify: () => {
+        notified = true;
+        return true;
+      },
+    });
+    expect(sent).toBe(false);
+    expect(notified).toBe(false);
+  });
+
+  test("notifies once per release version across cache refreshes and re-notifies for newer versions", async () => {
+    const notifications: { title: string; body: string }[] = [];
+    const now = 1_700_000_000_000;
+    const cacheFile = path.join(xdgBase, "gather-spotify-status", "update-check.json");
+
+    // 1.2.0 out while on 1.1.0 -> sends notification and records notifiedVersion
+    const first = await checkAndNotifyUpdate({
+      repo: "me/app",
+      currentVersion: "1.1.0",
+      now,
+      notify: (title, body) => {
+        notifications.push({ title, body });
+        return true;
+      },
+    });
+    expect(first).toBe(true);
+    expect(notifications).toEqual([
+      {
+        title: "gather-spotify-status v1.2.0 available",
+        body: "Run 'gather-spotify-status --update' to upgrade.",
+      },
+    ]);
+    expect(JSON.parse(fs.readFileSync(cacheFile, "utf8")).notifiedVersion).toBe("1.2.0");
+
+    // Same day -> already notified
+    expect(
+      await checkAndNotifyUpdate({
+        repo: "me/app",
+        currentVersion: "1.1.0",
+        now: now + 60_000,
+        notify: () => {
+          notifications.push({ title: "unexpected", body: "" });
+          return true;
+        },
+      }),
+    ).toBe(false);
+    expect(notifications).toHaveLength(1);
+
+    // 25 hours later (cache refreshes via fetchLatest) -> notifiedVersion preserved, still no duplicate notification
+    expect(
+      await checkAndNotifyUpdate({
+        repo: "me/app",
+        currentVersion: "1.1.0",
+        now: now + 25 * 60 * 60 * 1000,
+        notify: () => {
+          notifications.push({ title: "unexpected", body: "" });
+          return true;
+        },
+      }),
+    ).toBe(false);
+    expect(JSON.parse(fs.readFileSync(cacheFile, "utf8")).notifiedVersion).toBe("1.2.0");
+    expect(notifications).toHaveLength(1);
+
+    // Newer version 1.3.0 released after next cache window -> sends a new notification
+    latestVersion = "1.3.0";
+    expect(
+      await checkAndNotifyUpdate({
+        repo: "me/app",
+        currentVersion: "1.1.0",
+        now: now + 50 * 60 * 60 * 1000,
+        notify: (title, body) => {
+          notifications.push({ title, body });
+          return true;
+        },
+      }),
+    ).toBe(true);
+    expect(notifications).toHaveLength(2);
+    expect(notifications[1]?.title).toBe("gather-spotify-status v1.3.0 available");
+    expect(JSON.parse(fs.readFileSync(cacheFile, "utf8")).notifiedVersion).toBe("1.3.0");
+  });
+
+  test("does not record notifiedVersion if notification fails to send", async () => {
+    const cacheFile = path.join(xdgBase, "gather-spotify-status", "update-check.json");
+    const sent = await checkAndNotifyUpdate({
+      repo: "me/app",
+      currentVersion: "1.1.0",
+      notify: () => false,
+    });
+    expect(sent).toBe(false);
+    expect(JSON.parse(fs.readFileSync(cacheFile, "utf8")).notifiedVersion).toBeUndefined();
+  });
+
+  test("ignores poisoned update-check.json cache values", async () => {
+    const cacheDir = path.join(xdgBase, "gather-spotify-status");
+    const cacheFile = path.join(cacheDir, "update-check.json");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const now = 1_700_000_000_000;
+
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify({
+        checkedAt: now,
+        latest: "1.2.0; rm -rf /",
+        url: "http://insecure.example",
+        notifiedVersion: "1.2.0-bad",
+      }),
+    );
+    expect(await checkForUpdate({ repo: "me/app", currentVersion: "1.1.0", now })).toBeNull();
+
+    for (const badUrl of ["http://insecure.example", "not-a-url", "https://example.test/\x1b[31m"]) {
+      fs.writeFileSync(
+        cacheFile,
+        JSON.stringify({ checkedAt: now, latest: "9.9.9", url: badUrl, notifiedVersion: "9.9.9-bad" }),
+      );
+      expect(await checkForUpdate({ repo: "me/app", currentVersion: "1.1.0", now })).toEqual({
+        latest: "9.9.9",
+        url: "",
+      });
+    }
+  });
 });
