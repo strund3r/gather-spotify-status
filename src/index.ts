@@ -31,7 +31,7 @@ import { openReadme } from "./readme";
 import { describeSettings, parseSetArg, type SettingKey } from "./settings";
 import { refreshTokens, type TokenSet } from "./spotify";
 import { ensureTls } from "./tls";
-import { checkForUpdate, checkUpdateCommand, printUpdate } from "./update";
+import { checkForUpdate, checkUpdateCommand, printUpdate, updateCommand } from "./update";
 import { describeError, sleep } from "./util";
 import { VERSION } from "./version";
 
@@ -111,6 +111,7 @@ async function runOneShot(flags: Flags): Promise<Outcome | "none"> {
     await checkUpdateCommand();
     return 0;
   }
+  if (flags.update) return exitCode(await updateCommand());
   if (flags.get || flags.set.length) {
     if (flags.set.length) await setSettings(flags.set);
     if (flags.get) printSettings(flags.get === "all" ? undefined : flags.get);
