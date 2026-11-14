@@ -10,6 +10,8 @@ describe("parseFlags", () => {
     expect(f.setConfig).toEqual([]);
     expect(f.setup).toBe(false);
     expect(f.doctor).toBe(false);
+    expect(f.checkUpdate).toBe(false);
+    expect(f.update).toBe(false);
     expect(f.autostartRun).toBe(false);
     expect(f.logs).toBeUndefined();
   });
@@ -26,6 +28,7 @@ describe("parseFlags", () => {
       doctor: true,
     });
     expect(f.stop).toBe(false);
+    expect(parseFlags(["--update", "--check-update"])).toMatchObject({ update: true, checkUpdate: true });
   });
 
   test("info flags stop parsing (even before invalid args)", () => {
