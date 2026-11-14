@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { UserError } from "../src/errors";
 
 // Fake keychain: never touch the real one in tests.
 const store = new Map<string, string>();
@@ -96,6 +97,29 @@ describe("loadConfig", () => {
     expect(readFile().settings).toEqual({ maxLength: 42 });
     expect(config.loadSettings().maxLength).toBe(42);
   });
+
+  test("missing config throws UserError in non-TTY", async () => {
+    await expect(config.loadConfig(async () => "", false)).rejects.toThrow(/Missing configuration/);
+  });
+
+  test("first-time setup prompts for missing fields and skips storing env secrets", async () => {
+    process.env.GATHER_API_KEY = "env-gk";
+    const answers = ["sp/Prompted", "cid-p", "cs-p"];
+    const cfg = await config.loadConfig(async () => answers.shift() ?? "", true);
+    expect(cfg).toEqual({
+      GATHER_API_KEY: "env-gk",
+      GATHER_SPACE_ID: "sp/Prompted",
+      SPOTIFY_CLIENT_ID: "cid-p",
+      SPOTIFY_CLIENT_SECRET: "cs-p",
+    });
+    expect(store.get("GATHER_API_KEY")).toBeUndefined();
+    expect(store.get("SPOTIFY_CLIENT_SECRET")).toBe("cs-p");
+    expect(readFile()).toEqual({
+      GATHER_SPACE_ID: "sp/Prompted",
+      SPOTIFY_CLIENT_ID: "cid-p",
+      secretStorage: "keychain",
+    });
+  });
 });
 
 describe("settings + refresh token", () => {
@@ -148,5 +172,151 @@ describe("settings + refresh token", () => {
     await config.resetConfig();
     expect(store.size).toBe(0);
     expect(fs.existsSync(file())).toBe(false);
+  });
+});
+
+describe("parseSetConfigArg", () => {
+  test("parses KEY=VALUE and bare KEY", () => {
+    expect(config.parseSetConfigArg("GATHER_API_KEY=a=b")).toEqual({ key: "GATHER_API_KEY", value: "a=b" });
+    expect(config.parseSetConfigArg("  GATHER_SPACE_ID = sp/Room  ")).toEqual({
+      key: "GATHER_SPACE_ID",
+      value: "sp/Room",
+    });
+    expect(config.parseSetConfigArg("SPOTIFY_CLIENT_ID")).toEqual({ key: "SPOTIFY_CLIENT_ID" });
+  });
+
+  test("rejects unknown keys and empty values", () => {
+    expect(() => config.parseSetConfigArg("UNKNOWN=1")).toThrow(/unknown config key/);
+    expect(() => config.parseSetConfigArg("GATHER_API_KEY=")).toThrow(/cannot be empty/);
+    expect(() => config.parseSetConfigArg("GATHER_API_KEY=   ")).toThrow(/cannot be empty/);
+  });
+});
+
+describe("setConfigCommand", () => {
+  const fakeAsk = (answers: string[]) => {
+    const queue = [...answers];
+    const asked: Array<{ question: string; secret: boolean }> = [];
+    const fn = async (question: string, secret = false) => {
+      asked.push({ question, secret });
+      return queue.shift() ?? "";
+    };
+    return { fn, asked };
+  };
+
+  test("updates non-Spotify key while preserving settings and Spotify login", async () => {
+    writeFile({ ...OLD, settings: { maxLength: 42 }, autostartAsked: true });
+    await config.loadConfig();
+    await config.saveRefreshToken("rt1");
+
+    await config.setConfigCommand(["GATHER_API_KEY=new-gk"]);
+
+    expect(store.get("GATHER_API_KEY")).toBe("new-gk");
+    expect(store.get("SPOTIFY_REFRESH_TOKEN")).toBe("rt1");
+    expect(readFile().settings).toEqual({ maxLength: 42 });
+    expect(readFile().autostartAsked).toBe(true);
+    expect(await config.loadConfig()).toEqual({ ...OLD, GATHER_API_KEY: "new-gk" });
+  });
+
+  test("preserves Spotify login when SPOTIFY_CLIENT_ID is set to the same value", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+    await config.saveRefreshToken("rt1");
+
+    await config.setConfigCommand(["SPOTIFY_CLIENT_ID=cid"]);
+    expect(store.get("SPOTIFY_REFRESH_TOKEN")).toBe("rt1");
+  });
+
+  test("clears Spotify login when SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET changes", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+    await config.saveRefreshToken("rt1");
+
+    await config.setConfigCommand(["SPOTIFY_CLIENT_ID=new-cid"]);
+    expect(readFile().SPOTIFY_CLIENT_ID).toBe("new-cid");
+    expect(await config.loadRefreshToken()).toBeNull();
+
+    await config.saveRefreshToken("rt2");
+    await config.setConfigCommand(["SPOTIFY_CLIENT_SECRET=new-cs"]);
+    expect(store.get("SPOTIFY_CLIENT_SECRET")).toBe("new-cs");
+    expect(await config.loadRefreshToken()).toBeNull();
+  });
+
+  test("prompts via askFn when =VALUE is omitted (and re-prompts on empty)", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+    const { fn, asked } = fakeAsk(["", "sp/New"]);
+
+    await config.setConfigCommand(["GATHER_SPACE_ID"], fn, true);
+
+    expect(asked).toEqual([
+      { question: "  GATHER_SPACE_ID: ", secret: false },
+      { question: "  GATHER_SPACE_ID: ", secret: false },
+    ]);
+    expect(readFile().GATHER_SPACE_ID).toBe("sp/New");
+  });
+
+  test("requires TTY when =VALUE is omitted and validates all args before saving", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+
+    await expect(config.setConfigCommand(["GATHER_API_KEY"], fakeAsk([]).fn, false)).rejects.toBeInstanceOf(UserError);
+    await expect(config.setConfigCommand(["GATHER_API_KEY=changed", "NOPE=1"])).rejects.toMatchObject({ exitCode: 2 });
+    expect(store.get("GATHER_API_KEY")).toBe("gk");
+  });
+
+  test("works in file-fallback mode without losing refresh token on unrelated change", async () => {
+    keychainWorks = false;
+    writeFile(OLD);
+    await config.loadConfig();
+    await config.saveRefreshToken("rt-file");
+
+    await config.setConfigCommand(["GATHER_API_KEY=file-gk2"]);
+    expect(readFile().GATHER_API_KEY).toBe("file-gk2");
+    expect(readFile().SPOTIFY_REFRESH_TOKEN).toBe("rt-file");
+  });
+});
+
+describe("setupCommand", () => {
+  test("throws in non-TTY", async () => {
+    await expect(config.setupCommand(async () => "", false)).rejects.toBeInstanceOf(UserError);
+  });
+
+  test("keeps existing values on Enter, updates changed ones, and preserves settings & login", async () => {
+    writeFile({ ...OLD, settings: { workHours: "Mon-Fri 09:00-18:00" } });
+    await config.loadConfig();
+    await config.saveRefreshToken("rt1");
+
+    const answers = ["", "sp/Updated", "", ""];
+    const cfg = await config.setupCommand(async () => answers.shift() ?? "", true);
+
+    expect(cfg).toEqual({ ...OLD, GATHER_SPACE_ID: "sp/Updated" });
+    expect(readFile().settings).toEqual({ workHours: "Mon-Fri 09:00-18:00" });
+    expect(store.get("SPOTIFY_REFRESH_TOKEN")).toBe("rt1");
+  });
+
+  test("clears Spotify login when Spotify client secret changes during setup", async () => {
+    writeFile(OLD);
+    await config.loadConfig();
+    await config.saveRefreshToken("rt1");
+
+    const answers = ["", "", "", "new-cs"];
+    const cfg = await config.setupCommand(async () => answers.shift() ?? "", true);
+
+    expect(cfg.SPOTIFY_CLIENT_SECRET).toBe("new-cs");
+    expect(await config.loadRefreshToken()).toBeNull();
+  });
+
+  test("re-prompts on empty input when no existing config exists", async () => {
+    const answers = ["", "gk1", "sp/Room1", "cid1", "cs1"];
+    const cfg = await config.setupCommand(async () => answers.shift() ?? "", true);
+
+    expect(cfg).toEqual({
+      GATHER_API_KEY: "gk1",
+      GATHER_SPACE_ID: "sp/Room1",
+      SPOTIFY_CLIENT_ID: "cid1",
+      SPOTIFY_CLIENT_SECRET: "cs1",
+    });
+    expect(store.get("GATHER_API_KEY")).toBe("gk1");
+    expect(store.get("SPOTIFY_CLIENT_SECRET")).toBe("cs1");
   });
 });

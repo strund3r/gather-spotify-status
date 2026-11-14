@@ -7,6 +7,8 @@ describe("parseFlags", () => {
     const f = parseFlags([]);
     expect(f.info).toBeUndefined();
     expect(f.set).toEqual([]);
+    expect(f.setConfig).toEqual([]);
+    expect(f.setup).toBe(false);
     expect(f.autostartRun).toBe(false);
     expect(f.logs).toBeUndefined();
   });
@@ -58,6 +60,15 @@ describe("parseFlags", () => {
   test("--set is repeatable and keeps values starting with '-'", () => {
     expect(parseFlags(["--set", "a=1", "--set", "b=-2"]).set).toEqual(["a=1", "b=-2"]);
     expect(() => parseFlags(["--set"])).toThrow(/key=value/);
+  });
+
+  test("--setup and --set-config", () => {
+    expect(parseFlags(["--setup"]).setup).toBe(true);
+    expect(parseFlags(["--set-config", "GATHER_API_KEY=abc", "--set-config", "SPOTIFY_CLIENT_ID"]).setConfig).toEqual([
+      "GATHER_API_KEY=abc",
+      "SPOTIFY_CLIENT_ID",
+    ]);
+    expect(() => parseFlags(["--set-config"])).toThrow(/KEY or KEY=VALUE/);
   });
 
   test("unknown option → UsageError with exit code 2", () => {
