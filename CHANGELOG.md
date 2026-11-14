@@ -2,6 +2,21 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-13
+
+### Added
+
+- **`--doctor`**: non-destructive 7-point diagnostic check covering config & permissions, OS keychain storage, HTTPS/TLS & Netskope CA detection, Spotify token refresh, temporary Gather WebSocket connectivity, start-at-login status, and any running instance — with fix hints for warnings and failures.
+- **`--setup` and `--set-config KEY[=VALUE]`**: re-run the 4-field setup wizard (pressing Enter keeps existing values) or update individual connection credentials in place without `--reset` wiping `settings` or your saved Spotify login (the saved Spotify token is only cleared if `SPOTIFY_CLIENT_ID` or `SPOTIFY_CLIENT_SECRET` changes).
+
+### Changed
+
+- Compiled release binaries embed the version in their filenames (`gather-spotify-status-v<version>-<os>-<arch>[.exe]`).
+
+### Fixed
+
+- **Gather SDK event subscriptions**: subscribe only to connection diagnostic events (`info`, `warn`, `error`, `subscriptionsUpdated`), eliminating Gather server deprecation warnings (`mapSetScript`, `mapSetAreas`, `playerSetsFocusModeEndTime`) and permission errors for admin-only events.
+
 ## [1.0.0] - 2026-11-11
 
 First release. Licensed under GPL-3.0-or-later.
