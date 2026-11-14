@@ -97,6 +97,29 @@ describe("loadConfig", () => {
     expect(readFile().settings).toEqual({ maxLength: 42 });
     expect(config.loadSettings().maxLength).toBe(42);
   });
+
+  test("missing config throws UserError in non-TTY", async () => {
+    await expect(config.loadConfig(async () => "", false)).rejects.toThrow(/Missing configuration/);
+  });
+
+  test("first-time setup prompts for missing fields and skips storing env secrets", async () => {
+    process.env.GATHER_API_KEY = "env-gk";
+    const answers = ["sp/Prompted", "cid-p", "cs-p"];
+    const cfg = await config.loadConfig(async () => answers.shift() ?? "", true);
+    expect(cfg).toEqual({
+      GATHER_API_KEY: "env-gk",
+      GATHER_SPACE_ID: "sp/Prompted",
+      SPOTIFY_CLIENT_ID: "cid-p",
+      SPOTIFY_CLIENT_SECRET: "cs-p",
+    });
+    expect(store.get("GATHER_API_KEY")).toBeUndefined();
+    expect(store.get("SPOTIFY_CLIENT_SECRET")).toBe("cs-p");
+    expect(readFile()).toEqual({
+      GATHER_SPACE_ID: "sp/Prompted",
+      SPOTIFY_CLIENT_ID: "cid-p",
+      secretStorage: "keychain",
+    });
+  });
 });
 
 describe("settings + refresh token", () => {
