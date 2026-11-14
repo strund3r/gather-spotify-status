@@ -145,6 +145,7 @@ describe("service integration", () => {
       debug: false,
       logFd,
       flushMs: 5,
+      checkUpdate: async () => false,
       createGame: () => fakeGame.game,
       fetch: async () => ({ status: 200, data: playingTrack }),
       onReady: () => readyCount++,
@@ -202,6 +203,7 @@ describe("service integration", () => {
       debug: false,
       logFd,
       flushMs: 5,
+      checkUpdate: async () => false,
       createGame: () => fakeGame.game,
       fetch: async () => ({ status: 200, data: playingTrack }),
       exit: (code) => resolveExit(code),
@@ -260,5 +262,36 @@ describe("service integration", () => {
       { kind: "emoji", value: "" },
       { kind: "text", value: "" },
     ]);
+  });
+
+  test("schedules update check on connect, catches rejections, and clears timer on shutdown", async () => {
+    const fakeGame = createFakeGame();
+    let calls = 0;
+
+    const service = await runService(cfg, validTokens(), {
+      debug: false,
+      logFd,
+      flushMs: 5,
+      updateIntervalMs: 15,
+      checkUpdate: async () => {
+        calls++;
+        if (calls === 2) throw new Error("boom");
+        return false;
+      },
+      createGame: () => fakeGame.game,
+      fetch: async () => ({ status: 204, data: null }),
+      exit: () => {},
+    });
+    activeService = service;
+
+    expect(calls).toBe(0); // not called before Gather connects
+    fakeGame.emitConnection(true);
+    await waitFor(() => calls >= 3);
+
+    await service.shutdown("test", 0);
+    activeService = undefined;
+    const afterShutdown = calls;
+    await sleep(40);
+    expect(calls).toBe(afterShutdown);
   });
 });

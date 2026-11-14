@@ -227,7 +227,7 @@ gather-spotify-status --debug         # start with verbose logging (or: --set de
 
 ## Updates
 
-`gather-spotify-status --check-update` checks for a newer release, and the app also checks at most once a day when it starts. It only tells you; it never downloads anything by itself.
+`gather-spotify-status --check-update` checks for a newer release. The app also checks once a day while running in the background (and when it starts) and shows a one-time desktop notification when a new version is out. It never downloads or installs an update by itself.
 
 To upgrade in place, run `gather-spotify-status --update`. It downloads the release binary for your OS and CPU architecture, verifies its SHA-256 checksum against `SHA256SUMS`, replaces the installed binary, and restarts the background process if one was running. You can also download a new binary manually and run it once (see [It installs itself](#it-installs-itself)).
 

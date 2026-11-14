@@ -12,6 +12,7 @@ import { Poller } from "./poller";
 import type { Settings } from "./settings";
 import { fetchPlayback, PLAYBACK_STATE_SCOPE, TokenManager, type TokenSet } from "./spotify";
 import { CLEAR, type GatherStatus } from "./status";
+import { checkAndNotifyUpdate } from "./update";
 import { errorMessage, sleep } from "./util";
 import { VERSION } from "./version";
 
@@ -19,6 +20,8 @@ import { VERSION } from "./version";
 const SHUTDOWN_FLUSH_MS = 500;
 /** Gather SDK messages can be huge (whole state dumps); cut them in the log. */
 const GATHER_LOG_MAX_CHARS = 1000;
+/** Check for new releases once a day while the service runs in the background. */
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Minimal Gather SDK subscriptions: only connection lifecycle/diagnostics, avoiding deprecated map
@@ -60,6 +63,10 @@ export interface ServiceOptions {
   exit?: (code: number) => void;
   /** Optional shutdown flush delay in ms for tests (defaults to SHUTDOWN_FLUSH_MS). */
   flushMs?: number;
+  /** Optional update notifier for tests (defaults to checkAndNotifyUpdate). */
+  checkUpdate?: () => Promise<unknown>;
+  /** Optional update check interval in ms for tests (defaults to 24h). */
+  updateIntervalMs?: number;
 }
 
 export interface Service {
@@ -118,6 +125,12 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     debug: logger.debug,
   });
 
+  const checkUpdate = opts.checkUpdate ?? checkAndNotifyUpdate;
+  const runUpdateCheck = () => {
+    checkUpdate().catch((e: unknown) => logger.debug(`update check failed: ${errorMessage(e)}`));
+  };
+  let updateTimer: ReturnType<typeof setInterval> | undefined;
+
   game.subscribeToConnection((isConnected) => {
     const wasConnected = connected;
     connected = isConnected;
@@ -127,6 +140,9 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
       if (!ready) {
         ready = true;
         poller.start();
+        runUpdateCheck();
+        updateTimer = setInterval(runUpdateCheck, opts.updateIntervalMs ?? UPDATE_CHECK_INTERVAL_MS);
+        updateTimer.unref();
         opts.onReady?.();
       } else if (!wasConnected) {
         logger.info("Reconnected to Gather; resending status.");
@@ -142,6 +158,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     if (stopping) return;
     stopping = true;
     logger.info(`${reason}; clearing Gather status and exiting.`);
+    if (updateTimer) clearInterval(updateTimer);
     poller.stop();
     tokenManager.stop();
     try {
