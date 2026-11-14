@@ -58,9 +58,14 @@ function findChrome() {
 
 // GitHub-style heading ids so in-document links like (#where-your-secrets-are-stored) work.
 function slugify(html) {
-  return html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&[a-z]+;|&#\d+;/gi, "")
+  let text = html;
+  let prev;
+  do {
+    prev = text;
+    text = text.replace(/<[^>]+>|&[a-z]+;|&#\d+;/gi, "");
+  } while (text !== prev);
+  return text
+    .replace(/[<>]/g, "")
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
