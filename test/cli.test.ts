@@ -9,12 +9,13 @@ describe("parseFlags", () => {
     expect(f.set).toEqual([]);
     expect(f.setConfig).toEqual([]);
     expect(f.setup).toBe(false);
+    expect(f.doctor).toBe(false);
     expect(f.autostartRun).toBe(false);
     expect(f.logs).toBeUndefined();
   });
 
   test("boolean flags", () => {
-    const f = parseFlags(["--reset", "--insecure", "--foreground", "--no-install", "--debug", "--logout"]);
+    const f = parseFlags(["--reset", "--insecure", "--foreground", "--no-install", "--debug", "--logout", "--doctor"]);
     expect(f).toMatchObject({
       reset: true,
       insecure: true,
@@ -22,6 +23,7 @@ describe("parseFlags", () => {
       noInstall: true,
       debug: true,
       logout: true,
+      doctor: true,
     });
     expect(f.stop).toBe(false);
   });

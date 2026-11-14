@@ -18,6 +18,7 @@ import {
 } from "./config";
 import { APP_NAME } from "./constants";
 import { controlRunning, notifyReady, printStatus, receiveInit, spawnDaemon, stopDaemon } from "./daemon";
+import { doctorCommand } from "./doctor";
 import { UsageError, UserError } from "./errors";
 import { maybeInstall } from "./install";
 import { logLine, openLog, timestampConsole } from "./logfile";
@@ -103,6 +104,7 @@ async function runOneShot(flags: Flags): Promise<Outcome | "none"> {
     await printStatus();
     return 0;
   }
+  if (flags.doctor) return exitCode(await doctorCommand());
   if (flags.readme) return exitCode(await openReadme());
   if (flags.logs !== undefined) return followLogs(flags.logs);
   if (flags.checkUpdate) {
