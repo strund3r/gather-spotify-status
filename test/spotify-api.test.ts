@@ -162,6 +162,13 @@ describe("spotifyLogin (state + PKCE)", () => {
     expect((await fetch(`${loginUrl}/callback?state=forged&code=abc`)).status).toBe(400);
     expect((await fetch(`${loginUrl}/callback?error=access_denied`)).status).toBe(400);
 
+    const xss = await fetch(`${loginUrl}/callback?error=${encodeURIComponent("<script>alert(1)</script>")}`);
+    expect(xss.status).toBe(400);
+    expect(xss.headers.get("content-type")).toContain("text/plain");
+    const xssBody = await xss.text();
+    expect(xssBody).toBe("Spotify login failed: access_denied");
+    expect(xssBody).not.toContain("<script>");
+
     const done = await fetch(`${loginUrl}/callback?state=${encodeURIComponent(state)}&code=abc`);
     expect(done.status).toBe(200);
     expect(await done.text()).toContain("Logged in to Spotify");
