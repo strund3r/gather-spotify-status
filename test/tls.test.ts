@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isTlsError, probeAll } from "../src/tls";
+import { findNetskopeCa, isTlsError, probeAll } from "../src/tls";
 
 const hasOpenssl = spawnSync("openssl", ["version"]).status === 0;
 let dir: string;
@@ -49,6 +49,11 @@ test("isTlsError", () => {
   expect(isTlsError(Object.assign(new Error("x"), { code: "SELF_SIGNED_CERT_IN_CHAIN" }))).toBe(true);
   expect(isTlsError(new Error("unable to verify the first certificate"))).toBe(true);
   expect(isTlsError(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }))).toBe(false);
+});
+
+test("findNetskopeCa returns a path string or undefined", () => {
+  const res = findNetskopeCa();
+  expect(res === undefined || typeof res === "string").toBe(true);
 });
 
 describe.skipIf(!hasOpenssl)("probeAll", () => {

@@ -78,7 +78,7 @@ export async function probeAll(urls = probeUrls()): Promise<ProbeResult> {
   return results.find((r) => !r.ok && r.tls) ?? results.find((r) => !r.ok) ?? { ok: true };
 }
 
-function findNetskopeCa(): string | undefined {
+export function findNetskopeCa(): string | undefined {
   const candidates = NETSKOPE_CA_PATHS[process.platform] ?? [];
   return candidates.find((p) => {
     try {
