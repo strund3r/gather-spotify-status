@@ -13,6 +13,8 @@ import {
   resetConfig,
   saveRefreshToken,
   saveSetting,
+  setConfigCommand,
+  setupCommand,
 } from "./config";
 import { APP_NAME } from "./constants";
 import { controlRunning, notifyReady, printStatus, receiveInit, spawnDaemon, stopDaemon } from "./daemon";
@@ -114,6 +116,14 @@ async function runOneShot(flags: Flags): Promise<Outcome | "none"> {
   }
   if (flags.pause || flags.resume) return exitCode(await pauseResume(flags.pause ? "pause" : "resume"));
   if (flags.autostartAction) return exitCode(autostartCommand(flags.autostartAction));
+  if (flags.setup || flags.setConfig.length) {
+    if (flags.setup) await setupCommand();
+    if (flags.setConfig.length) await setConfigCommand(flags.setConfig);
+    if (runningInstance()) {
+      console.log(out.dim(`Restart ${APP_NAME} (${APP_NAME} --stop && ${APP_NAME}) to apply new credentials.`));
+    }
+    return 0;
+  }
   if (flags.logout) {
     await logout();
     return 0;
