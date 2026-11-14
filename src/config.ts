@@ -261,8 +261,7 @@ async function promptField(field: FieldSpec, askFn: typeof ask, current?: string
   return value;
 }
 
-async function readStoredConfig(file: string): Promise<{ values: Partial<Config>; storage?: SecretStorage }> {
-  fixPermissions(file);
+async function readFileAndKeychain(file: string): Promise<{ values: Partial<Config>; storage?: SecretStorage }> {
   const { values: fromFile, secretStorage: storedIn } = readConfigFile(file);
   const values: Partial<Config> = { ...fromFile };
   if (storedIn !== "file") {
@@ -273,7 +272,43 @@ async function readStoredConfig(file: string): Promise<{ values: Partial<Config>
       }
     }
   }
-  return { values, storage: storedIn };
+  const storage = storedIn ?? (SECRET_FIELDS.some((f) => fromFile[f.key]) ? "file" : undefined);
+  return { values, storage };
+}
+
+async function readStoredConfig(file: string): Promise<{ values: Partial<Config>; storage?: SecretStorage }> {
+  fixPermissions(file);
+  return readFileAndKeychain(file);
+}
+
+export interface ConfigInspection {
+  file: string;
+  exists: boolean;
+  values: Partial<Config>;
+  missing: ConfigKey[];
+  fromEnv: ConfigKey[];
+  storage?: SecretStorage;
+}
+
+/** Non-destructive inspection of config.json, OS keychain, and env overrides for `--doctor`. */
+export async function inspectConfig(file = configPath()): Promise<ConfigInspection> {
+  const exists = fs.existsSync(file);
+  const { values: stored, storage } = await readFileAndKeychain(file);
+  const values: Partial<Config> = {};
+  const missing: ConfigKey[] = [];
+  const fromEnv: ConfigKey[] = [];
+  for (const { key } of FIELDS) {
+    const envVal = nonEmptyString(process.env[key]);
+    if (envVal) {
+      values[key] = envVal;
+      fromEnv.push(key);
+    } else if (stored[key]) {
+      values[key] = stored[key];
+    } else {
+      missing.push(key);
+    }
+  }
+  return { file, exists, values, missing, fromEnv, storage };
 }
 
 async function saveSecretsAndConfig(
