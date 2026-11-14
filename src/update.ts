@@ -359,23 +359,33 @@ async function downloadAndVerifyBinary(
 }
 
 function replaceBinary(target: string, bytes: Buffer, platform: NodeJS.Platform): boolean {
+  const backup = `${target}.old`;
+  let movedToBackup = false;
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     const tmp = `${target}.new`;
-    fs.writeFileSync(tmp, bytes);
+    fs.writeFileSync(tmp, bytes, { mode: 0o755 });
     fs.chmodSync(tmp, 0o755);
     if (platform === "win32" && fs.existsSync(target)) {
       // A running .exe can't be overwritten, but it can be renamed.
       try {
-        fs.unlinkSync(`${target}.old`);
+        fs.unlinkSync(backup);
       } catch {
         // no previous .old
       }
-      fs.renameSync(target, `${target}.old`);
+      fs.renameSync(target, backup);
+      movedToBackup = true;
     }
     fs.renameSync(tmp, target);
     return true;
   } catch (e) {
+    if (movedToBackup) {
+      try {
+        fs.renameSync(backup, target);
+      } catch {
+        // best-effort rollback
+      }
+    }
     console.error(err.red(`Could not install update to ${target}: ${errorMessage(e)}`));
     return false;
   }
