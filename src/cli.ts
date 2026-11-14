@@ -35,6 +35,7 @@ Setup:
   --config-path       Print the config file location
   --readme            Open the README (PDF) with setup instructions
   --check-update      Check for a newer version
+  --update            Download, verify, and install the latest version
   --insecure          Disable TLS verification without asking (only if TLS checks fail)
   --no-install        Run this copy as-is; don't install/upgrade it to the per-user bin folder
   -v, --version       Print the version
@@ -66,6 +67,7 @@ export interface Flags {
   setup: boolean;
   setConfig: string[];
   checkUpdate: boolean;
+  update: boolean;
   /** Bare --autostart: started by the login entry. */
   autostartRun: boolean;
   autostartAction?: AutostartAction;
@@ -89,6 +91,7 @@ const BOOLEAN_FLAGS = {
   "--logout": "logout",
   "--setup": "setup",
   "--check-update": "checkUpdate",
+  "--update": "update",
 } as const satisfies Record<string, keyof Flags>;
 
 const INFO_FLAGS: Record<string, NonNullable<Flags["info"]>> = {
@@ -125,6 +128,7 @@ export function parseFlags(argv: readonly string[]): Flags {
     setup: false,
     setConfig: [],
     checkUpdate: false,
+    update: false,
     autostartRun: false,
     set: [],
   };
