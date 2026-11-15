@@ -2,6 +2,20 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.2.0](https://github.com/strund3r/gather-spotify-status/compare/v1.1.0...v1.2.0) (2026-11-15)
+
+
+### Features
+
+* **cli:** add `--update` command for in-place binary upgrades ([#13](https://github.com/strund3r/gather-spotify-status/issues/13)) ([e6b2771](https://github.com/strund3r/gather-spotify-status/commit/e6b27711abb2d94dfe76de1546b9257fa751a7ad))
+* **install:** add cross-platform install scripts ([#15](https://github.com/strund3r/gather-spotify-status/issues/15)) ([8fbd33f](https://github.com/strund3r/gather-spotify-status/commit/8fbd33f17fc6cc0d5b01f0209a211d1cb5a470de))
+* **notify:** add desktop update notifications and harden self-update ([#14](https://github.com/strund3r/gather-spotify-status/issues/14)) ([c98e32d](https://github.com/strund3r/gather-spotify-status/commit/c98e32d749398885602f9003dff0062dae695607))
+
+
+### Bug Fixes
+
+* **security:** resolve CodeQL code scanning alerts ([#12](https://github.com/strund3r/gather-spotify-status/issues/12)) ([5d97e75](https://github.com/strund3r/gather-spotify-status/commit/5d97e755324e629925c947f59cdfd3fdda2d22f8))
+
 ## [1.1.0] - 2026-11-13
 
 ### Added
