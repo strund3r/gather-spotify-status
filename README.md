@@ -47,6 +47,12 @@ shasum -a 256 -c SHA256SUMS --ignore-missing  # macOS
 Get-FileHash .\gather-spotify-status-v*-windows-x64.exe  # Windows: compare with SHA256SUMS
 ```
 
+You can also verify that the binary was built in GitHub Actions with `gh`:
+
+```sh
+gh attestation verify gather-spotify-status-v* --repo strund3r/gather-spotify-status
+```
+
 On Linux/macOS, make it executable: `chmod +x gather-spotify-status-*`
 
 **macOS:** the binaries are not signed by Apple.
@@ -381,7 +387,7 @@ Source lives in `src/`, tests in `test/`. Running from source needs Bun, not Nod
 
 Running a freshly built binary moves it out of `bin/` and installs it. Pass `--no-install` while developing.
 
-To release a new version, bump `version` in `package.json` (the app reads it from there), add an entry to `CHANGELOG.md`, and push a `v<version>` tag. The release workflow then builds and publishes the binaries.
+Releases are automated with `release-please`: pushes to `main` maintain a release PR that bumps `version` in `package.json` and updates `CHANGELOG.md` from Conventional Commits. Merging that PR tags the release, builds the 5 binaries + `SHA256SUMS`, generates build provenance attestations, and publishes the GitHub release (pushing a `v<version>` tag manually also works).
 
 `build:all` downloads the Bun runtime for each target platform the first time, so it needs network access.
 
