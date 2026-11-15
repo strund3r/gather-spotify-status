@@ -8,6 +8,24 @@ It ships as a single executable. You don't need Node.js, npm or anything else in
 
 ## Download / install
 
+### Quick install
+
+Both installers download the latest release binary and `SHA256SUMS`, verify the SHA-256 checksum before installing, and add the install folder to your `PATH`:
+
+**Linux / macOS:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/strund3r/gather-spotify-status/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/strund3r/gather-spotify-status/main/install.ps1 | iex
+```
+
+### Manual download
+
 Pick the binary for your platform:
 
 | Platform            | File                                           |
