@@ -14,7 +14,7 @@ const version = (process.argv[2] ?? pkgVersion).replace(/^v/, "");
 
 const changelog = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
 const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const headingRe = new RegExp(`^## \\[${escaped}\\][^\\r\\n]*\\r?\\n`, "m");
+const headingRe = new RegExp(`^## (?:\\[${escaped}\\]|${escaped})(?:\\([^)]*\\))?(?:\\s|$)[^\\r\\n]*\\r?\\n`, "m");
 const match = headingRe.exec(changelog);
 
 if (!match) {
@@ -23,7 +23,7 @@ if (!match) {
 }
 
 const rest = changelog.slice(match.index + match[0].length);
-const nextHeading = /^## \[/m.exec(rest);
+const nextHeading = /^## (?:\[|\d)/m.exec(rest);
 const body = (nextHeading ? rest.slice(0, nextHeading.index) : rest).trim();
 
 if (!body) {

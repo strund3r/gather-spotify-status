@@ -2,7 +2,15 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["**", "!bin", "!assets", "!coverage", "!node_modules", "!package-lock.json"]
+    "includes": [
+      "**",
+      "!bin",
+      "!assets",
+      "!coverage",
+      "!node_modules",
+      "!package-lock.json",
+      "!.release-please-manifest.json"
+    ]
   },
   "formatter": {
     "enabled": true,
