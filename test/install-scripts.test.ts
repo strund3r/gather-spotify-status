@@ -117,8 +117,11 @@ describe("install scripts mock release suite", () => {
   describe.skipIf(!psCmd)("install.ps1", () => {
     function runPs(extraEnv: Record<string, string>) {
       const cmd = psCmd ?? "powershell.exe";
+      const ps7Prefix = "C:\\Program Files\\PowerShell\\7\\Modules";
+      const pollutedPsModulePath = process.env.PSModulePath ? `${ps7Prefix};${process.env.PSModulePath}` : ps7Prefix;
       return runAsync(cmd, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT], {
         ...process.env,
+        PSModulePath: pollutedPsModulePath, // simulate pwsh 7 parent on GitHub windows-latest runners
         GSS_REPO: "me/app",
         GSS_GITHUB_API: `http://127.0.0.1:${server.port}`,
         GSS_RELEASE_BASE: `http://127.0.0.1:${server.port}`,
@@ -134,12 +137,14 @@ describe("install scripts mock release suite", () => {
 
       // Fresh install writes the verified executable.
       const res1 = await runPs({ GSS_INSTALL_DIR: installDir });
+      expect(res1.stderr).toBe("");
       expect(res1.status).toBe(0);
       expect(fs.readFileSync(target)).toEqual(winBytes);
 
       // Upgrade moves the existing executable to .old before installing the new one.
       fs.writeFileSync(target, "previous-version");
       const res2 = await runPs({ GSS_INSTALL_DIR: installDir });
+      expect(res2.stderr).toBe("");
       expect(res2.status).toBe(0);
       expect(fs.readFileSync(target)).toEqual(winBytes);
       expect(fs.readFileSync(`${target}.old`, "utf8")).toBe("previous-version");
@@ -150,6 +155,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "ps-bad-hash");
       const res = await runPs({ GSS_INSTALL_DIR: installDir });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("Checksum verification failed");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status.exe"))).toBe(false);
     }, 15_000);
 
@@ -158,6 +164,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "ps-bad-tag");
       const res = await runPs({ GSS_INSTALL_DIR: installDir });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("Invalid or missing release version");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status.exe"))).toBe(false);
     }, 15_000);
 
@@ -165,6 +172,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "ps-bad-arch");
       const res = await runPs({ GSS_INSTALL_DIR: installDir, GSS_ARCH: "ARM64" });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("Unsupported architecture");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status.exe"))).toBe(false);
     }, 15_000);
   });
@@ -193,6 +201,7 @@ describe("install scripts mock release suite", () => {
         SHELL: "/bin/zsh",
         GSS_INSTALL_DIR: installDir,
       });
+      expect(res.stderr).toBe("");
       expect(res.status).toBe(0);
 
       // Binary exists with executable permissions and shell rc received the PATH export.
@@ -209,6 +218,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "sh-bad-hash");
       const res = await runSh({ GSS_INSTALL_DIR: installDir, GSS_SKIP_PATH: "1" });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("checksum verification failed");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status"))).toBe(false);
     });
 
@@ -217,6 +227,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "sh-bad-tag");
       const res = await runSh({ GSS_INSTALL_DIR: installDir, GSS_SKIP_PATH: "1" });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("invalid or missing release version");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status"))).toBe(false);
     });
 
@@ -224,6 +235,7 @@ describe("install scripts mock release suite", () => {
       const installDir = path.join(tmpBase, "sh-bad-os");
       const res = await runSh({ GSS_INSTALL_DIR: installDir, GSS_SKIP_PATH: "1", GSS_UNAME_S: "FreeBSD" });
       expect(res.status).not.toBe(0);
+      expect(res.stderr + res.stdout).toContain("unsupported OS");
       expect(fs.existsSync(path.join(installDir, "gather-spotify-status"))).toBe(false);
     });
   });
