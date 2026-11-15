@@ -10,6 +10,22 @@
   # Suppress per-chunk progress bars in Windows PowerShell 5.1 so downloads run at full speed.
   $ProgressPreference = "SilentlyContinue"
 
+  # PowerShell 7 (pwsh) parent processes export incompatible PSModulePath entries;
+  # ensure Windows PowerShell 5.1 resolves its own system modules first.
+  if ($PSVersionTable.PSVersion.Major -lt 6) {
+    $OwnModules = [System.IO.Path]::Combine($PSHOME, "Modules")
+    $CleanedModules = New-Object System.Collections.Generic.List[string]
+    $CleanedModules.Add($OwnModules)
+    if ($env:PSModulePath) {
+      foreach ($Entry in ($env:PSModulePath -split ';')) {
+        if ($Entry -and ($Entry -notmatch '\\PowerShell\\7(\\|$)') -and ($Entry -ine $OwnModules)) {
+          $CleanedModules.Add($Entry)
+        }
+      }
+    }
+    $env:PSModulePath = $CleanedModules -join ';'
+  }
+
   # PowerShell 5.1 defaults to older SSL/TLS protocols; enable TLS 1.2 for GitHub.
   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
@@ -97,7 +113,19 @@
       throw "Could not find SHA-256 entry for $Asset in SHA256SUMS"
     }
 
-    $ActualHash = (Get-FileHash -Path $AssetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Compute SHA-256 directly via .NET to avoid loading Microsoft.PowerShell.Utility's Get-FileHash module.
+    $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $Stream = [System.IO.File]::OpenRead($AssetPath)
+      try {
+        $HashBytes = $Sha256.ComputeHash($Stream)
+      } finally {
+        $Stream.Dispose()
+      }
+      $ActualHash = ([System.BitConverter]::ToString($HashBytes) -replace '-', '').ToLowerInvariant()
+    } finally {
+      $Sha256.Dispose()
+    }
     if ($ActualHash -ne $ExpectedHash) {
       throw "Checksum verification failed for $Asset (expected $ExpectedHash, got $ActualHash)"
     }
