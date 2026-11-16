@@ -53,6 +53,22 @@ describe("PID file", () => {
     expect(fs.existsSync(file)).toBe(false);
   });
 
+  test("reused PID belonging to an unrelated process is treated as stale", () => {
+    const cmd = process.platform === "win32" ? "ping" : "sleep";
+    const args = process.platform === "win32" ? ["-n", "6", "127.0.0.1"] : ["5"];
+    const child = spawn(cmd, args, { stdio: "ignore", windowsHide: true });
+    try {
+      const pid = child.pid ?? 0;
+      expect(isAlive(pid)).toBe(true);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ pid, version: "1.0.0" }));
+      expect(runningInstance(file)).toBeNull();
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      child.kill();
+    }
+  });
+
   test("removePidFile only removes our own file", () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ pid: 1, version: "1.0.0" }));
