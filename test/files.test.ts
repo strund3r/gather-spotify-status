@@ -35,6 +35,13 @@ describe("fsutil", () => {
     expect(readJson(file)).toEqual({ a: 1 });
   });
 
+  test("writePrivateFile cleans up temp file if rename fails", () => {
+    const targetDir = path.join(dir, "existing-dir");
+    fs.mkdirSync(targetDir);
+    expect(() => writePrivateFile(targetDir, "data")).toThrow();
+    expect(fs.readdirSync(dir)).toEqual(["existing-dir"]);
+  });
+
   test("readJson: undefined for missing or invalid", () => {
     expect(readJson(path.join(dir, "missing"))).toBeUndefined();
     fs.writeFileSync(path.join(dir, "bad"), "{");

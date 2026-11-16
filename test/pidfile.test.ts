@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isAlive, readPidFile, removePidFile, runningInstance, writePidFile } from "../src/pidfile";
+import { isAlive, matchesAppProcess, readPidFile, removePidFile, runningInstance, writePidFile } from "../src/pidfile";
 import { VERSION } from "../src/version";
 
 let dir: string;
@@ -67,6 +67,14 @@ describe("PID file", () => {
     } finally {
       child.kill();
     }
+  });
+
+  test("matchesAppProcess recognizes app and runtime binaries only", () => {
+    expect(matchesAppProcess("/usr/local/bin/gather-spotify-status")).toBe(true);
+    expect(matchesAppProcess("C:\\Users\\u\\bun.exe")).toBe(true);
+    expect(matchesAppProcess("node")).toBe(true);
+    expect(matchesAppProcess("ping.exe")).toBe(false);
+    expect(matchesAppProcess("Finder")).toBe(false);
   });
 
   test("removePidFile only removes our own file", () => {

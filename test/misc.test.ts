@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import readline from "node:readline";
 import {
   autostartCommand,
   autostartEnabled,
@@ -10,6 +12,9 @@ import {
   shouldOfferAutostart,
   windowsRunArgs,
 } from "../src/autostart";
+import { UserError } from "../src/errors";
+import { opener } from "../src/open";
+import { ask } from "../src/prompt";
 import { checkForUpdate } from "../src/update";
 
 test("first-run autostart question: only interactive, compiled, not asked before", () => {
@@ -166,5 +171,59 @@ describe("update check (mock GitHub)", () => {
   });
   test("errors are silent", async () => {
     expect(await checkForUpdate({ force: true, repo: "me/missing" })).toBeNull();
+  });
+});
+
+describe("opener", () => {
+  test("selects platform-specific launcher without cmd.exe on Windows", () => {
+    expect(opener("C:\\a&b\\README.pdf", "win32")).toEqual([
+      "rundll32.exe",
+      ["url.dll,FileProtocolHandler", "C:\\a&b\\README.pdf"],
+    ]);
+    expect(opener("/tmp/README.pdf", "darwin")).toEqual(["open", ["/tmp/README.pdf"]]);
+    expect(opener("/tmp/README.pdf", "linux")).toEqual(["xdg-open", ["/tmp/README.pdf"]]);
+  });
+});
+
+describe("ask (non-secret readline)", () => {
+  function mockReadline(trigger: (rl: EventEmitter, cb: (answer: string) => void) => void) {
+    return spyOn(readline, "createInterface").mockImplementation(() => {
+      const rl = new EventEmitter() as EventEmitter & {
+        close: () => void;
+        question: (_q: string, cb: (answer: string) => void) => void;
+      };
+      rl.close = () => {
+        rl.emit("close");
+      };
+      rl.question = (_q, cb) => {
+        queueMicrotask(() => trigger(rl, cb));
+      };
+      return rl as unknown as readline.Interface;
+    });
+  }
+
+  test("resolves with user answer", async () => {
+    const spy = mockReadline((_rl, cb) => cb("yes"));
+    try {
+      expect(await ask("Continue? ")).toBe("yes");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("rejects with UserError(130) on SIGINT and EOF close", async () => {
+    const spySigint = mockReadline((rl) => rl.emit("SIGINT"));
+    try {
+      await expect(ask("Continue? ")).rejects.toThrow(UserError);
+    } finally {
+      spySigint.mockRestore();
+    }
+
+    const spyClose = mockReadline((rl) => rl.emit("close"));
+    try {
+      await expect(ask("Continue? ")).rejects.toThrow(UserError);
+    } finally {
+      spyClose.mockRestore();
+    }
   });
 });
