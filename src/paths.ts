@@ -19,14 +19,17 @@ export function configDir(): string {
   return path.join(xdgConfigHome(), APP_NAME);
 }
 
+/** Full path to `config.json` inside the per-user config directory. */
 export function configPath(): string {
   return path.join(configDir(), "config.json");
 }
 
+/** Full path to the rotating daemon/launcher log file. */
 export function logPath(): string {
   return path.join(configDir(), `${APP_NAME}.log`);
 }
 
+/** Full path to the PID/control-channel metadata file. */
 export function pidPath(): string {
   return path.join(configDir(), `${APP_NAME}.pid`);
 }

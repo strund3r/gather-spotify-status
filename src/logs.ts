@@ -7,6 +7,7 @@ import { logPath } from "./paths";
 export const DEFAULT_LOG_LINES = 50;
 const FOLLOW_INTERVAL_MS = 500;
 
+/** Return up to the last `n` newline-delimited lines from `text` (ignoring a trailing newline). */
 export function lastLines(text: string, n: number): string {
   const lines = text.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();

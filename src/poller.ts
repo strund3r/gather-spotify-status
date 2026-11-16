@@ -49,6 +49,9 @@ export interface PollerState {
   lastError?: string;
 }
 
+/**
+ * Polls Spotify playback on a timer, applies privacy rules and backoff, and pushes changes to Gather.
+ */
 export class Poller {
   state: PollerState = {
     paused: false,

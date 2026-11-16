@@ -30,6 +30,7 @@ export interface StatusPayload {
   backoffUntil: number;
 }
 
+/** Runtime type guard for responses received from `GET /status`. */
 export function isStatusPayload(v: unknown): v is StatusPayload {
   return (
     isRecord(v) &&

@@ -13,12 +13,28 @@ const CANCELLED_EXIT_CODE = 130;
 export function ask(question: string, secret = false): Promise<string> {
   if (!secret) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise((resolve) =>
+    return new Promise((resolve, reject) => {
+      // Guard with `settled` because closing rl after SIGINT/answer also emits "close".
+      let settled = false;
+      rl.on("SIGINT", () => {
+        if (settled) return;
+        settled = true;
+        rl.close();
+        process.stdout.write("\n");
+        reject(new UserError("Cancelled.", CANCELLED_EXIT_CODE));
+      });
+      rl.on("close", () => {
+        if (settled) return;
+        settled = true;
+        reject(new UserError("Cancelled.", CANCELLED_EXIT_CODE));
+      });
       rl.question(question, (answer) => {
+        if (settled) return;
+        settled = true;
         rl.close();
         resolve(answer);
-      }),
-    );
+      });
+    });
   }
 
   return new Promise((resolve, reject) => {

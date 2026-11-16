@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PID file of the running instance: {pid, version, port, token}. Mode 0600 (holds the control token).
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { APP_NAME } from "./constants";
 import { readJson, removeFile, writePrivateJson } from "./fsutil";
@@ -15,6 +16,7 @@ export interface Instance {
   token?: string;
 }
 
+/** Return true if a process with `pid` currently exists (`EPERM` means alive under another user). */
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -24,17 +26,41 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-/** On Linux, guard against PID reuse by checking the process really is us. */
-function looksLikeUs(pid: number): boolean {
-  if (process.platform !== "linux") return true;
-  try {
-    const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
-    if (cmdline.includes(APP_NAME) || /index\.(js|ts)/.test(cmdline)) return true;
-    const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
-    return environ.split("\0").includes("GSS_DAEMON=1");
-  } catch {
-    return true; // can't tell; assume it is
+export function matchesAppProcess(name: string): boolean {
+  const base = (name.split(/[\\/]/).pop() ?? name).toLowerCase();
+  return base.includes(APP_NAME) || base === "bun" || base === "bun.exe" || base === "node" || base === "node.exe";
+}
+
+/** Guard against PID reuse by checking the process executable is ours (or bun/node in dev mode). */
+export function looksLikeUs(pid: number): boolean {
+  if (process.platform === "linux") {
+    try {
+      const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+      if (cmdline.includes(APP_NAME) || /index\.(js|ts)/.test(cmdline)) return true;
+      const environ = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
+      return environ.split("\0").includes("GSS_DAEMON=1");
+    } catch {
+      return true; // can't tell; assume it is
+    }
   }
+  if (process.platform === "darwin") {
+    const r = spawnSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 2000 });
+    if (r.status === 0 && r.stdout.trim()) return matchesAppProcess(r.stdout.trim());
+    return true; // indeterminate: don't discard a potentially valid PID
+  }
+  if (process.platform === "win32") {
+    const r = spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 2000,
+    });
+    if (r.status === 0) {
+      const m = /^"([^"]+)","(\d+)"/m.exec(r.stdout.trim());
+      if (m?.[1] && Number(m[2]) === pid) return matchesAppProcess(m[1]);
+    }
+    return true; // indeterminate (e.g. localized/missing CSV row): assume ours
+  }
+  return true;
 }
 
 export function readPidFile(file = pidPath()): Instance | null {

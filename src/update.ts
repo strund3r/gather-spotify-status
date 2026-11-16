@@ -261,6 +261,7 @@ export async function checkAndNotifyUpdate(opts: NotifyUpdateOptions = {}): Prom
   return true;
 }
 
+/** Print a one-line notice that a newer release is available. */
 export function printUpdate(info: UpdateInfo): void {
   console.log(
     out.cyan(`↑ New version v${info.latest} available — run '${APP_NAME} --update' to upgrade`) +
@@ -360,10 +361,10 @@ async function downloadAndVerifyBinary(
 
 function replaceBinary(target: string, bytes: Buffer, platform: NodeJS.Platform): boolean {
   const backup = `${target}.old`;
+  const tmp = `${target}.new`;
   let movedToBackup = false;
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    const tmp = `${target}.new`;
     fs.writeFileSync(tmp, bytes, { mode: 0o755 });
     fs.chmodSync(tmp, 0o755);
     if (platform === "win32" && fs.existsSync(target)) {
@@ -379,6 +380,11 @@ function replaceBinary(target: string, bytes: Buffer, platform: NodeJS.Platform)
     fs.renameSync(tmp, target);
     return true;
   } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // staged binary already moved or never created
+    }
     if (movedToBackup) {
       try {
         fs.renameSync(backup, target);

@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isAlive, readPidFile, removePidFile, runningInstance, writePidFile } from "../src/pidfile";
+import { isAlive, matchesAppProcess, readPidFile, removePidFile, runningInstance, writePidFile } from "../src/pidfile";
 import { VERSION } from "../src/version";
 
 let dir: string;
@@ -51,6 +51,30 @@ describe("PID file", () => {
     fs.writeFileSync(file, JSON.stringify({ pid, version: "1.0.0" }));
     expect(runningInstance(file)).toBeNull();
     expect(fs.existsSync(file)).toBe(false);
+  });
+
+  test("reused PID belonging to an unrelated process is treated as stale", () => {
+    const cmd = process.platform === "win32" ? "ping" : "sleep";
+    const args = process.platform === "win32" ? ["-n", "6", "127.0.0.1"] : ["5"];
+    const child = spawn(cmd, args, { stdio: "ignore", windowsHide: true });
+    try {
+      const pid = child.pid ?? 0;
+      expect(isAlive(pid)).toBe(true);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ pid, version: "1.0.0" }));
+      expect(runningInstance(file)).toBeNull();
+      expect(fs.existsSync(file)).toBe(false);
+    } finally {
+      child.kill();
+    }
+  });
+
+  test("matchesAppProcess recognizes app and runtime binaries only", () => {
+    expect(matchesAppProcess("/usr/local/bin/gather-spotify-status")).toBe(true);
+    expect(matchesAppProcess("C:\\Users\\u\\bun.exe")).toBe(true);
+    expect(matchesAppProcess("node")).toBe(true);
+    expect(matchesAppProcess("ping.exe")).toBe(false);
+    expect(matchesAppProcess("Finder")).toBe(false);
   });
 
   test("removePidFile only removes our own file", () => {

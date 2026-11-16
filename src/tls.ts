@@ -50,6 +50,7 @@ const TLS_ERROR_CODES = new Set([
 
 export type ProbeResult = { ok: true } | { ok: false; tls: boolean; url: string; code: string; message: string };
 
+/** True if an error looks like a TLS/certificate verification failure rather than a general network error. */
 export function isTlsError(e: unknown): boolean {
   const code = errorCode(e) ?? "";
   if (TLS_ERROR_CODES.has(code)) return true;

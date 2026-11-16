@@ -29,6 +29,7 @@ export interface MaybeInstallOptions {
   running?: () => ReturnType<typeof runningInstance>;
 }
 
+/** Per-user directory where the self-installed binary lives. */
 export function installDir(home = os.homedir(), platform: NodeJS.Platform = process.platform): string {
   if (platform === "win32") {
     const base = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
@@ -37,6 +38,7 @@ export function installDir(home = os.homedir(), platform: NodeJS.Platform = proc
   return path.join(home, ".local", "bin");
 }
 
+/** Full path to the installed `gather-spotify-status` executable. */
 export function installPath(home = os.homedir(), platform: NodeJS.Platform = process.platform): string {
   return path.join(installDir(home, platform), platform === "win32" ? `${APP_NAME}.exe` : APP_NAME);
 }
@@ -204,9 +206,9 @@ export async function maybeInstall(opts: MaybeInstallOptions = {}): Promise<void
     await (opts.stopRunning ?? stopDaemon)();
   }
 
+  const tmp = `${target}.new`;
   try {
     fs.mkdirSync(targetDir, { recursive: true });
-    const tmp = `${target}.new`;
     fs.copyFileSync(self, tmp);
     fs.chmodSync(tmp, 0o755);
     if (platform === "win32" && fs.existsSync(target)) {
@@ -220,6 +222,11 @@ export async function maybeInstall(opts: MaybeInstallOptions = {}): Promise<void
     }
     fs.renameSync(tmp, target);
   } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // staged binary already moved or never created
+    }
     console.error(err.red(`Could not install to ${target} (${errorMessage(e)}). Running this copy instead.`));
     return;
   }

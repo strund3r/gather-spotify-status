@@ -199,6 +199,11 @@ main() {
     fi
   fi
 
+  # Stop any running daemon before replacing the binary on disk.
+  if [ -x "$target" ]; then
+    "$target" --stop >/dev/null 2>&1 || true
+  fi
+
   mv -f "$staged" "$target"
   printf 'Installed %s v%s to %s\n' "$APP_NAME" "$version" "$target"
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Entry point: dispatch commands, start the launcher / background process / foreground service.
 // The only place that turns errors into exit codes (see UserError).
+import fs from "node:fs";
 import { autostartCommand, offerAutostart } from "./autostart";
 import { type Flags, HELP, parseFlags } from "./cli";
 import { err, out } from "./colors";
@@ -178,7 +179,8 @@ async function runDaemon(): Promise<Outcome> {
   const init = await initPromise;
   const service = await (await import("./service")).runService(init.cfg, init.tokens, {
     debug: init.debug,
-    logFd: openLog(),
+    // Launcher already rotated the log before spawning; avoid rotating away startup banners.
+    logFd: openLog(undefined, undefined, false),
     onReady: notifyReady,
   });
   onFatal = (e) => {
@@ -239,6 +241,12 @@ async function start(flags: Flags): Promise<Outcome> {
     pid = await spawnDaemon({ tokens, cfg, debug: flags.debug }, logFd);
   } catch (e) {
     throw new UserError(`Could not start in the background: ${describeError(e)}. See ${logPath()}`);
+  } finally {
+    try {
+      fs.closeSync(logFd);
+    } catch {
+      // already closed
+    }
   }
   console.log(out.green("✓ Running in background ") + out.dim(`(PID ${pid})`));
   console.log(`  ${out.dim("Logs:  ")} ${logPath()}`);

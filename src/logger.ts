@@ -6,6 +6,7 @@
 let timestamps = false;
 let debugEnabled: () => boolean = () => false;
 
+/** Configure whether log lines include ISO timestamps and whether debug messages are emitted. */
 export function configureLogger(opts: { timestamps?: boolean; debug?: () => boolean }): void {
   if (opts.timestamps !== undefined) timestamps = opts.timestamps;
   if (opts.debug) debugEnabled = opts.debug;

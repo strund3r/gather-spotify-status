@@ -2,10 +2,12 @@
 // Small generic helpers.
 import axios from "axios";
 
+/** Promise-based delay helper. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** True for plain non-null, non-array objects. */
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }

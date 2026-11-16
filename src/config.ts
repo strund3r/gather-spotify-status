@@ -128,6 +128,7 @@ function writeConfigFile(file: string, values: Partial<Config>, storage: SecretS
 
 const warnedInvalid = new Set<string>();
 
+/** Read user settings from `config.json`, falling back to defaults for missing/invalid keys. */
 export function loadSettings(): Settings {
   return normalizeSettings(readRaw().settings, (key, message) => {
     if (warnedInvalid.has(key)) return;
