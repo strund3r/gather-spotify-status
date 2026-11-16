@@ -140,10 +140,12 @@
     $MovedToBackup = $false
     try {
       if (Test-Path -LiteralPath $Target) {
-        try {
-          & $Target --stop *> $null
-        } catch {
-          # best-effort stop; old/non-executable binaries may fail
+        if (($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows) {
+          try {
+            & $Target --stop *> $null
+          } catch {
+            # best-effort stop; old/non-executable binaries may fail
+          }
         }
         if (Test-Path -LiteralPath $Backup) {
           Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
