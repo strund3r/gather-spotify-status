@@ -199,6 +199,10 @@ main() {
     fi
   fi
 
+  if [ -x "$target" ]; then
+    "$target" --stop >/dev/null 2>&1 || true
+  fi
+
   mv -f "$staged" "$target"
   printf 'Installed %s v%s to %s\n' "$APP_NAME" "$version" "$target"
 

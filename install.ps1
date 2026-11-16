@@ -135,12 +135,16 @@
     $Staged = "$Target.new"
     $Backup = "$Target.old"
 
-    # Stage first and swap; Windows allows renaming an existing .exe to .old even
-    # when upgrading a running copy, and we roll back .old if the swap fails.
+    # Stage first and swap; stop any running instance first so Windows does not lock .old.
     Copy-Item -Path $AssetPath -Destination $Staged -Force
     $MovedToBackup = $false
     try {
       if (Test-Path -LiteralPath $Target) {
+        try {
+          & $Target --stop *> $null
+        } catch {
+          # best-effort stop; old/non-executable binaries may fail
+        }
         if (Test-Path -LiteralPath $Backup) {
           Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
         }

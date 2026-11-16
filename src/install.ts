@@ -204,9 +204,9 @@ export async function maybeInstall(opts: MaybeInstallOptions = {}): Promise<void
     await (opts.stopRunning ?? stopDaemon)();
   }
 
+  const tmp = `${target}.new`;
   try {
     fs.mkdirSync(targetDir, { recursive: true });
-    const tmp = `${target}.new`;
     fs.copyFileSync(self, tmp);
     fs.chmodSync(tmp, 0o755);
     if (platform === "win32" && fs.existsSync(target)) {
@@ -220,6 +220,11 @@ export async function maybeInstall(opts: MaybeInstallOptions = {}): Promise<void
     }
     fs.renameSync(tmp, target);
   } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // staged binary already moved or never created
+    }
     console.error(err.red(`Could not install to ${target} (${errorMessage(e)}). Running this copy instead.`));
     return;
   }
