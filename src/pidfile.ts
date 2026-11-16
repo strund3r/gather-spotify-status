@@ -46,7 +46,7 @@ export function looksLikeUs(pid: number): boolean {
   if (process.platform === "darwin") {
     const r = spawnSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 2000 });
     if (r.status === 0 && r.stdout.trim()) return matchesAppProcess(r.stdout.trim());
-    return true;
+    return true; // indeterminate: don't discard a potentially valid PID
   }
   if (process.platform === "win32") {
     const r = spawnSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
@@ -58,7 +58,7 @@ export function looksLikeUs(pid: number): boolean {
       const m = /^"([^"]+)","(\d+)"/m.exec(r.stdout.trim());
       if (m?.[1] && Number(m[2]) === pid) return matchesAppProcess(m[1]);
     }
-    return true;
+    return true; // indeterminate (e.g. localized/missing CSV row): assume ours
   }
   return true;
 }

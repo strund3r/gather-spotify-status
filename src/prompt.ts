@@ -14,6 +14,7 @@ export function ask(question: string, secret = false): Promise<string> {
   if (!secret) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     return new Promise((resolve, reject) => {
+      // Guard with `settled` because closing rl after SIGINT/answer also emits "close".
       let settled = false;
       rl.on("SIGINT", () => {
         if (settled) return;
