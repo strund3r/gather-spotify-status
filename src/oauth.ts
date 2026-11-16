@@ -14,6 +14,7 @@ import { describeError, errorCode, errorMessage } from "./util";
 /** Fixed: it's part of the redirect URI registered in the Spotify app. */
 export const LOGIN_PORT = 42843;
 
+/** Encode binary data as unpadded base64url (RFC 7636 PKCE / OAuth state). */
 function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

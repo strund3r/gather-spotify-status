@@ -179,6 +179,7 @@ async function runDaemon(): Promise<Outcome> {
   const init = await initPromise;
   const service = await (await import("./service")).runService(init.cfg, init.tokens, {
     debug: init.debug,
+    // Launcher already rotated the log before spawning; avoid rotating away startup banners.
     logFd: openLog(undefined, undefined, false),
     onReady: notifyReady,
   });

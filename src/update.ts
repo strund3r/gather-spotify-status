@@ -261,6 +261,7 @@ export async function checkAndNotifyUpdate(opts: NotifyUpdateOptions = {}): Prom
   return true;
 }
 
+/** Print a one-line notice that a newer release is available. */
 export function printUpdate(info: UpdateInfo): void {
   console.log(
     out.cyan(`↑ New version v${info.latest} available — run '${APP_NAME} --update' to upgrade`) +

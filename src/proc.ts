@@ -3,6 +3,7 @@
 import { spawn } from "node:child_process";
 import { err } from "./colors";
 
+/** True when running from a `bun build --compile` standalone executable rather than `bun src/index.ts`. */
 export function isCompiledBinary(): boolean {
   const script = process.argv[1] ?? "";
   return !script || script.startsWith("/$bunfs/") || /^[A-Za-z]:[\\/]~BUN[\\/]/.test(script);

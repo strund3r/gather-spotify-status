@@ -105,6 +105,7 @@ const SPECS: { [K in SettingKey]: Spec<K> } = {
 
 export const SETTING_KEYS = Object.keys(SPECS) as SettingKey[];
 
+/** Runtime type guard for `--set` / `--get` setting keys. */
 export function isSettingKey(key: string): key is SettingKey {
   return (SETTING_KEYS as string[]).includes(key);
 }

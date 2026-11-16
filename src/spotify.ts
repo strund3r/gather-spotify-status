@@ -39,6 +39,7 @@ export interface TokenSet {
 export type RefreshResult = { ok: true; tokens: TokenSet } | { ok: false; revoked: boolean; message: string };
 export type RefreshOutcome = "ok" | "revoked" | "error";
 
+/** HTTP Basic Authorization header value for Spotify client-credential token requests. */
 export function basicAuth(cfg: Config): string {
   return `Basic ${Buffer.from(`${cfg.SPOTIFY_CLIENT_ID}:${cfg.SPOTIFY_CLIENT_SECRET}`).toString("base64")}`;
 }

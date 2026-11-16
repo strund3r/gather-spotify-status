@@ -17,6 +17,7 @@ export function ensurePrivateDir(dir: string): void {
  */
 export function writePrivateFile(file: string, data: string): void {
   ensurePrivateDir(path.dirname(file));
+  // Unique suffix avoids races when launcher and daemon update the same file (e.g. update-check.json).
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
   try {
     fs.writeFileSync(tmp, data, { mode: 0o600 });
@@ -28,6 +29,7 @@ export function writePrivateFile(file: string, data: string): void {
   }
 }
 
+/** Serialize `value` as JSON and write it atomically with private file permissions. */
 export function writePrivateJson(file: string, value: unknown, pretty = false): void {
   writePrivateFile(file, `${JSON.stringify(value, null, pretty ? 2 : undefined)}\n`);
 }

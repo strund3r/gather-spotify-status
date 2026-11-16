@@ -41,6 +41,7 @@ export interface GameLike {
   sendAction(action: Parameters<Game["sendAction"]>[0]): void;
 }
 
+/** Instantiate a Gather `Game` client subscribed only to connection lifecycle/diagnostic events. */
 export function createGatherGame(spaceId: string, apiKey: string): GameLike {
   return new Game(spaceId, () => Promise.resolve({ apiKey }), undefined, undefined, undefined, {
     subscribeTo: { ...GATHER_SUBSCRIPTIONS },

@@ -59,6 +59,7 @@ export function applyTemplate(template: string, vars: Record<string, string | un
     .trim();
 }
 
+/** Truncate `text` to `max` Unicode code points with an ellipsis (0 = no limit). */
 export function truncate(text: string, max: number): string {
   if (max <= 0) return text;
   const chars = Array.from(text); // don't split emoji / surrogate pairs

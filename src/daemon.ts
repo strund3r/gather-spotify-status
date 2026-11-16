@@ -165,6 +165,7 @@ function describeStorage(): string {
   }
 }
 
+/** Print whether the background daemon is running, its live status, log path, and secret backend. */
 export async function printStatus(): Promise<void> {
   const inst = runningInstance();
   if (!inst) {

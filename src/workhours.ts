@@ -67,6 +67,7 @@ export function parseWorkHours(spec: string): WorkHours | null {
   return { days, startMin, endMin };
 }
 
+/** True when `now` falls inside the configured schedule (or when `hours` is null / "off"). */
 export function inWorkHours(now: Date, hours: WorkHours | null): boolean {
   if (!hours) return true;
   const minutes = now.getHours() * 60 + now.getMinutes();
