@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 const OPEN_TIMEOUT_MS = 3000;
 
 function opener(target: string): [command: string, args: string[]] {
-  if (process.platform === "win32") return ["cmd", ["/c", "start", "", target]];
+  if (process.platform === "win32") return ["rundll32.exe", ["url.dll,FileProtocolHandler", target]];
   if (process.platform === "darwin") return ["open", [target]];
   return ["xdg-open", [target]];
 }
