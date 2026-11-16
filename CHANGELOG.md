@@ -2,6 +2,13 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.2.1](https://github.com/strund3r/gather-spotify-status/compare/v1.2.0...v1.2.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* harden process checks, installers, atomic writes, and cleanup ([#21](https://github.com/strund3r/gather-spotify-status/issues/21)) ([b83b9bd](https://github.com/strund3r/gather-spotify-status/commit/b83b9bd7e6fa6169ff5f3050fc924e8c3dae35ec))
+
 ## [1.2.0](https://github.com/strund3r/gather-spotify-status/compare/v1.1.0...v1.2.0) (2026-11-15)
 
 
