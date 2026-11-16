@@ -27,7 +27,7 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-function matchesAppProcess(name: string): boolean {
+export function matchesAppProcess(name: string): boolean {
   const base = path.basename(name).toLowerCase();
   return base.includes(APP_NAME) || base === "bun" || base === "bun.exe" || base === "node" || base === "node.exe";
 }

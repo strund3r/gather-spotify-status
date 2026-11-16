@@ -4,10 +4,13 @@ import { spawn } from "node:child_process";
 /** Assume success if the opener is still running after this long (some keep running). */
 const OPEN_TIMEOUT_MS = 3000;
 
-function opener(target: string): [command: string, args: string[]] {
+export function opener(
+  target: string,
+  platform: NodeJS.Platform = process.platform,
+): [command: string, args: string[]] {
   // Use rundll32 directly instead of `cmd /c start` so shell metacharacters (&, ^, %) in paths aren't interpreted.
-  if (process.platform === "win32") return ["rundll32.exe", ["url.dll,FileProtocolHandler", target]];
-  if (process.platform === "darwin") return ["open", [target]];
+  if (platform === "win32") return ["rundll32.exe", ["url.dll,FileProtocolHandler", target]];
+  if (platform === "darwin") return ["open", [target]];
   return ["xdg-open", [target]];
 }
 
