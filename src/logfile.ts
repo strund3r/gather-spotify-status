@@ -10,12 +10,14 @@ import { configDir, logPath } from "./paths";
 export const MAX_LOG_BYTES = 5 * 1024 * 1024;
 
 /** Open the log file for appending (mode 0600), rotating it to .1 when over MAX_LOG_BYTES. */
-export function openLog(file = logPath(), dir = configDir()): number {
+export function openLog(file = logPath(), dir = configDir(), rotate = true): number {
   ensurePrivateDir(dir);
-  try {
-    if (fs.statSync(file).size > MAX_LOG_BYTES) fs.renameSync(file, `${file}.1`);
-  } catch {
-    // no log yet
+  if (rotate) {
+    try {
+      if (fs.statSync(file).size > MAX_LOG_BYTES) fs.renameSync(file, `${file}.1`);
+    } catch {
+      // no log yet
+    }
   }
   const fd = fs.openSync(file, "a", 0o600);
   if (process.platform !== "win32") fs.chmodSync(file, 0o600);
