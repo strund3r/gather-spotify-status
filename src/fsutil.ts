@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // File helpers for private data (config, PID file with the control token, caches).
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -11,15 +12,20 @@ export function ensurePrivateDir(dir: string): void {
 }
 
 /**
- * Write `data` to `file` atomically (tmp file + rename) with mode 0600, creating the directory (0700).
+ * Write `data` to `file` atomically (unique tmp file + rename) with mode 0600, creating the directory (0700).
  * A crash mid-write leaves the old file intact.
  */
 export function writePrivateFile(file: string, data: string): void {
   ensurePrivateDir(path.dirname(file));
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  if (!isWindows) fs.chmodSync(tmp, 0o600); // mode is ignored when tmp already existed
-  fs.renameSync(tmp, file);
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(tmp, data, { mode: 0o600 });
+    if (!isWindows) fs.chmodSync(tmp, 0o600);
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    removeFile(tmp);
+    throw e;
+  }
 }
 
 export function writePrivateJson(file: string, value: unknown, pretty = false): void {
