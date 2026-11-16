@@ -2,7 +2,6 @@
 // PID file of the running instance: {pid, version, port, token}. Mode 0600 (holds the control token).
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import path from "node:path";
 import { APP_NAME } from "./constants";
 import { readJson, removeFile, writePrivateJson } from "./fsutil";
 import { pidPath } from "./paths";
@@ -28,7 +27,7 @@ export function isAlive(pid: number): boolean {
 }
 
 export function matchesAppProcess(name: string): boolean {
-  const base = path.basename(name).toLowerCase();
+  const base = (name.split(/[\\/]/).pop() ?? name).toLowerCase();
   return base.includes(APP_NAME) || base === "bun" || base === "bun.exe" || base === "node" || base === "node.exe";
 }
 
