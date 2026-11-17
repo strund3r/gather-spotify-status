@@ -4,13 +4,15 @@
 // The only module that loads the Gather SDK; index.ts imports it lazily.
 import { Game, logger as gatherLogger } from "@gathertown/gather-game-client";
 import { type Config, loadSettings, saveRefreshToken } from "./config";
+import { APP_NAME } from "./constants";
 import { startControlServer } from "./control";
 import { logLine } from "./logfile";
 import { configureLogger, logger } from "./logger";
+import { sendDesktopNotification } from "./notify";
 import { removePidFile, writePidFile } from "./pidfile";
 import { Poller } from "./poller";
 import type { Settings } from "./settings";
-import { fetchPlayback, PLAYBACK_STATE_SCOPE, TokenManager, type TokenSet } from "./spotify";
+import { fetchPlayback, PLAYBACK_STATE_SCOPE, TokenManager, type TokenManagerOptions, type TokenSet } from "./spotify";
 import { CLEAR, type GatherStatus } from "./status";
 import { checkAndNotifyUpdate } from "./update";
 import { errorMessage, sleep } from "./util";
@@ -68,6 +70,10 @@ export interface ServiceOptions {
   checkUpdate?: () => Promise<unknown>;
   /** Optional update check interval in ms for tests (defaults to 24h). */
   updateIntervalMs?: number;
+  /** Optional token refresher for tests (defaults to refreshTokens). */
+  refresh?: TokenManagerOptions["refresh"];
+  /** Optional desktop notification sender for tests (defaults to sendDesktopNotification). */
+  notify?: (title: string, body: string) => boolean;
 }
 
 export interface Service {
@@ -100,6 +106,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
 
   const tokenManager = new TokenManager(cfg, tokens, {
     log: logger.info,
+    refresh: opts.refresh,
     onTokens: (t) => {
       saveRefreshToken(t.refreshToken)
         .then((ok) => {
@@ -113,6 +120,7 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
   const game = (opts.createGame ?? createGatherGame)(cfg.GATHER_SPACE_ID, cfg.GATHER_API_KEY);
   let connected = false;
   let ready = false;
+  const notify = opts.notify ?? sendDesktopNotification;
 
   const poller = new Poller({
     getToken: () => tokenManager.getValidToken(),
@@ -124,6 +132,15 @@ export async function runService(cfg: Config, tokens: TokenSet, opts: ServiceOpt
     now: () => Date.now(),
     log: logger.info,
     debug: logger.debug,
+    onSessionExpired: () => {
+      notify(`${APP_NAME}: Spotify login expired`, `Run '${APP_NAME}' in a terminal to log in again.`);
+    },
+    onForbidden: () => {
+      notify(
+        `${APP_NAME}: Spotify access denied (403)`,
+        "Check User Management allowlist and Premium status in your Spotify app.",
+      );
+    },
   });
 
   const checkUpdate = opts.checkUpdate ?? checkAndNotifyUpdate;

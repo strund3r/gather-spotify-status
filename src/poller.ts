@@ -22,6 +22,10 @@ export interface PollerDeps {
   now(): number;
   log(msg: string): void;
   debug(msg: string): void;
+  /** Called once when the Spotify login is revoked/expired and polling stops. */
+  onSessionExpired?: () => void;
+  /** Called once per streak of consecutive 403 responses on playback polling. */
+  onForbidden?: () => void;
 }
 
 export const POLL_MS = 5000;
@@ -67,6 +71,8 @@ export class Poller {
   private lastDelay = POLL_MS;
   private playerDisabled = false;
   private forbiddenLogged = false;
+  private forbiddenCount = 0;
+  private forbiddenNotified = false;
 
   constructor(private deps: PollerDeps) {}
 
@@ -125,6 +131,7 @@ export class Poller {
 
   /** One poll. Returns ms until the next poll, or null to stop polling. Exposed for tests. */
   async tick(retried = false): Promise<number | null> {
+    if (this.state.sessionExpired) return null;
     const s = this.deps.settings();
     if (this.state.paused) return POLL_MS;
 
@@ -190,6 +197,11 @@ export class Poller {
           );
           this.forbiddenLogged = true;
         }
+        this.forbiddenCount++;
+        if (this.forbiddenCount >= 2 && !this.forbiddenNotified) {
+          this.forbiddenNotified = true;
+          this.deps.onForbidden?.();
+        }
         this.state.lastError = "HTTP 403";
         this.state.backoffUntil = this.deps.now() + FORBIDDEN_DELAY_MS;
         return FORBIDDEN_DELAY_MS;
@@ -211,6 +223,9 @@ export class Poller {
     this.state.consecutiveFailures = 0;
     this.state.backoffUntil = 0;
     this.state.lastError = undefined;
+    this.forbiddenCount = 0;
+    this.forbiddenLogged = false;
+    this.forbiddenNotified = false;
   }
 
   /** Exponential backoff 5s, 10s, 20s … capped at 5 min. Never exits. */
@@ -228,6 +243,7 @@ export class Poller {
       this.state.sessionExpired = true;
       this.sendIfChanged(CLEAR, true);
       this.deps.log(`Spotify session expired. Run ${APP_NAME} again to log in.`);
+      this.deps.onSessionExpired?.();
     }
     return null;
   }
