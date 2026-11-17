@@ -1,7 +1,7 @@
 name: Release
 
 # Automates version bumps, CHANGELOG updates, and release PRs on main via release-please,
-# and builds, attests, and publishes the 5 binaries + SHA256SUMS when a release is cut.
+# and builds, attests, and publishes the 5 binaries, SHA256SUMS, and install scripts when a release is cut.
 on:
   push:
     branches: [main]
@@ -78,6 +78,8 @@ jobs:
           subject-path: |
             bin/gather-spotify-status-v*
             bin/SHA256SUMS
+            install.sh
+            install.ps1
 
       - name: Publish GitHub release assets
         env:
@@ -85,9 +87,9 @@ jobs:
           TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" bin/gather-spotify-status-v* bin/SHA256SUMS --clobber
+            gh release upload "$TAG" bin/gather-spotify-status-v* bin/SHA256SUMS install.sh install.ps1 --clobber
           else
             node scripts/release-notes.mjs > release-notes.md
-            gh release create "$TAG" bin/gather-spotify-status-v* bin/SHA256SUMS \
+            gh release create "$TAG" bin/gather-spotify-status-v* bin/SHA256SUMS install.sh install.ps1 \
               --title "$TAG" --notes-file release-notes.md --verify-tag
           fi
