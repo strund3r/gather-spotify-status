@@ -294,4 +294,34 @@ describe("service integration", () => {
     await sleep(40);
     expect(calls).toBe(afterShutdown);
   });
+
+  test("sends desktop notification when Spotify login expires", async () => {
+    const fakeGame = createFakeGame();
+    const notifications: { title: string; body: string }[] = [];
+
+    const service = await runService(
+      cfg,
+      { ...validTokens(), expiresAt: 0 },
+      {
+        debug: false,
+        logFd,
+        flushMs: 5,
+        checkUpdate: async () => false,
+        createGame: () => fakeGame.game,
+        refresh: async () => ({ ok: false, revoked: true, message: "invalid_grant" }),
+        fetch: async () => ({ status: 401, data: {} }),
+        notify: (title, body) => {
+          notifications.push({ title, body });
+          return true;
+        },
+        exit: () => {},
+      },
+    );
+    activeService = service;
+
+    fakeGame.emitConnection(true);
+    await waitFor(() => notifications.length >= 1);
+    expect(notifications[0]?.title).toContain("Spotify login expired");
+    expect(notifications[0]?.body).toContain("gather-spotify-status");
+  });
 });
