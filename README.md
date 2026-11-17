@@ -387,7 +387,7 @@ Source lives in `src/`, tests in `test/`. Running from source needs Bun, not Nod
 
 Running a freshly built binary moves it out of `bin/` and installs it. Pass `--no-install` while developing.
 
-Releases are automated with `release-please`: pushes to `main` maintain a release PR that bumps `version` in `package.json` and updates `CHANGELOG.md` from Conventional Commits. Merging that PR tags the release, builds the 5 binaries + `SHA256SUMS`, generates build provenance attestations, and publishes the GitHub release (pushing a `v<version>` tag manually also works).
+Releases are automated with `release-please`: pushes to `main` maintain a release PR that bumps `version` in `package.json` and updates `CHANGELOG.md` from Conventional Commits. Merging that PR tags the release, builds the 5 binaries + `SHA256SUMS`, attaches `install.sh` and `install.ps1`, generates build provenance attestations, and publishes the GitHub release (pushing a `v<version>` tag manually also works).
 
 `build:all` downloads the Bun runtime for each target platform the first time, so it needs network access.
 
