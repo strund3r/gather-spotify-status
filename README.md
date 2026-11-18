@@ -174,7 +174,7 @@ The background copy doesn't give up on errors:
 - **Network problems and Spotify outages:** it retries with increasing waits (5 s, 10 s, 20 s … up to 5 min) and recovers on its own.
 - **Spotify rate limits (`429`):** it waits as long as Spotify asks.
 - **Gather disconnects:** the Gather SDK reconnects, and your status is resent.
-- **Revoked login:** it clears your status and waits. `--status` shows _"Spotify login expired"_; run `gather-spotify-status` again to log in.
+- **Revoked login or repeated `403`:** it clears your status, shows a desktop notification, and waits (or stops polling on revoked login). `--status` shows _"Spotify login expired"_; run `gather-spotify-status` again to log in.
 
 ### Start at login
 

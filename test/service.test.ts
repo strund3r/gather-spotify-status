@@ -294,4 +294,73 @@ describe("service integration", () => {
     await sleep(40);
     expect(calls).toBe(afterShutdown);
   });
+
+  test("sends desktop notification when Spotify login expires", async () => {
+    const fakeGame = createFakeGame();
+    const notifications: { title: string; body: string }[] = [];
+
+    const service = await runService(
+      cfg,
+      { ...validTokens(), expiresAt: 0 },
+      {
+        debug: false,
+        logFd,
+        flushMs: 5,
+        checkUpdate: async () => false,
+        createGame: () => fakeGame.game,
+        refresh: async () => ({ ok: false, revoked: true, message: "invalid_grant" }),
+        fetch: async () => ({ status: 401, data: {} }),
+        notify: (title, body) => {
+          notifications.push({ title, body });
+          return true;
+        },
+        exit: () => {},
+      },
+    );
+    activeService = service;
+
+    fakeGame.emitConnection(true);
+    await waitFor(() => notifications.length >= 1);
+    expect(notifications[0]?.title).toContain("Spotify login expired");
+    expect(notifications[0]?.body).toContain("gather-spotify-status");
+  });
+
+  test("sends desktop notification on repeated 403 responses", async () => {
+    const fakeGame = createFakeGame();
+    const notifications: { title: string; body: string }[] = [];
+    let fetches = 0;
+
+    const service = await runService(
+      cfg,
+      { ...validTokens(), scope: "" },
+      {
+        debug: false,
+        logFd,
+        flushMs: 5,
+        checkUpdate: async () => false,
+        createGame: () => fakeGame.game,
+        fetch: async () => {
+          fetches++;
+          return { status: 403, data: {} };
+        },
+        notify: (title, body) => {
+          notifications.push({ title, body });
+          return true;
+        },
+        exit: () => {},
+      },
+    );
+    activeService = service;
+
+    fakeGame.emitConnection(true);
+    await waitFor(() => fetches >= 1);
+    expect(notifications).toHaveLength(0);
+
+    // Trigger immediate re-poll via reconnect instead of waiting 5 min backoff.
+    fakeGame.emitConnection(false);
+    fakeGame.emitConnection(true);
+    await waitFor(() => notifications.length >= 1);
+    expect(notifications[0]?.title).toContain("Spotify access denied (403)");
+    expect(notifications[0]?.body).toContain("User Management");
+  });
 });

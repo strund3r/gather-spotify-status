@@ -91,12 +91,19 @@ describe("Poller error policy", () => {
     expect(t.poller.state.consecutiveFailures).toBe(1);
   });
 
-  test("revoked login → clear status and stop polling (null)", async () => {
-    const t = setup([{ status: 401, data: {} }], { forceRefresh: async () => "revoked" });
+  test("revoked login → clear status, notify once, and stop polling (null)", async () => {
+    let expiredNotifications = 0;
+    const t = setup([{ status: 401, data: {} }], {
+      forceRefresh: async () => "revoked",
+      onSessionExpired: () => expiredNotifications++,
+    });
     expect(await t.poller.tick()).toBeNull();
     expect(t.poller.state.sessionExpired).toBe(true);
     expect(t.sent).toEqual([{ emoji: "", text: "" }]);
     expect(t.logs.join("\n")).toMatch(/expired/);
+    expect(expiredNotifications).toBe(1);
+    expect(await t.poller.tick()).toBeNull();
+    expect(expiredNotifications).toBe(1);
   });
 
   test("no token (revoked earlier) → stop", async () => {
@@ -141,17 +148,33 @@ describe("Poller error policy", () => {
     expect(t.sent.length).toBe(1);
   });
 
-  test("403 on currently-playing → logged once, 5 min wait", async () => {
+  test("403 on currently-playing → logged once, notifies on repeat, resets on recovery", async () => {
+    let forbiddenNotifications = 0;
     const t = setup(
       [
         { status: 403, data: {} },
         { status: 403, data: {} },
+        { status: 403, data: {} },
+        { status: 200, data: playing },
+        { status: 403, data: {} },
+        { status: 403, data: {} },
       ],
-      { canUsePlayer: () => false },
+      { canUsePlayer: () => false, onForbidden: () => forbiddenNotifications++ },
     );
     expect(await t.poller.tick()).toBe(300000);
+    expect(forbiddenNotifications).toBe(0);
     expect(await t.poller.tick()).toBe(300000);
+    expect(forbiddenNotifications).toBe(1);
+    expect(await t.poller.tick()).toBe(300000);
+    expect(forbiddenNotifications).toBe(1);
     expect(t.logs.filter((l) => l.includes("403")).length).toBe(1);
+
+    // A successful poll resets the 403 streak so a future outage can notify again.
+    expect(await t.poller.tick()).toBe(POLL_MS);
+    expect(await t.poller.tick()).toBe(300000);
+    expect(forbiddenNotifications).toBe(1);
+    expect(await t.poller.tick()).toBe(300000);
+    expect(forbiddenNotifications).toBe(2);
   });
 
   test("uses /me/player only when skipPrivateSession is on and scope granted", async () => {
