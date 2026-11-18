@@ -2,6 +2,13 @@
 
 All notable changes to this project. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.3.0](https://github.com/strund3r/gather-spotify-status/compare/v1.2.1...v1.3.0) (2026-11-18)
+
+
+### Features
+
+* **notify:** send desktop alerts on expired Spotify login and repeated 403s ([#25](https://github.com/strund3r/gather-spotify-status/issues/25)) ([ac1cf61](https://github.com/strund3r/gather-spotify-status/commit/ac1cf6188a2fead454bdb37cdd5ccc1bc5c7c3a4))
+
 ## [1.2.1](https://github.com/strund3r/gather-spotify-status/compare/v1.2.0...v1.2.1) (2026-11-16)
 
 
